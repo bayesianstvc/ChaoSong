@@ -1,0 +1,105 @@
+name: Sync public content from Sites
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even when the published generation and renderer are unchanged
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # UTC: avoid the top-of-hour scheduling peak.
+    - cron: '7,22,37,52 * * * *'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      FORCE_SYNC: ${{ inputs.force || false }}
+    steps:
+      - name: Check out the public renderer
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install the locked dependencies
+        run: npm ci
+
+      - name: Test public input and media handling
+        run: npm test
+
+      - name: Restore verified media derivatives
+        uses: actions/cache/restore@v5
+        with:
+          path: .cache
+          key: ${{ runner.os }}-chaosong-media-v1-${{ hashFiles('package-lock.json', 'tools/sync-media.mjs') }}-restore-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-chaosong-media-v1-${{ hashFiles('package-lock.json', 'tools/sync-media.mjs') }}-
+
+      - name: Read the public source and build only when changed
+        id: sync
+        run: node tools/sync-public-site.mjs
+
+      - name: Select the completed generation cache key
+        if: steps.sync.outputs.changed == 'true'
+        id: generation
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const { generation } = JSON.parse(readFileSync('.build/candidate-release.json', 'utf8'));
+          if (typeof generation !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(generation)) {
+            throw new Error('Invalid completed generation identity');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `value=${generation}\n`);
+          NODE
+
+      - name: Save verified media for this generation
+        if: steps.sync.outputs.changed == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: .cache
+          key: ${{ runner.os }}-chaosong-media-v1-${{ hashFiles('package-lock.json', 'tools/sync-media.mjs') }}-${{ steps.generation.outputs.value }}
+
+      - name: Configure Pages
+        if: steps.sync.outputs.changed == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload the validated static candidate
+        if: steps.sync.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ steps.sync.outputs.artifact_path }}
+
+      - name: Verify that Sites still matches the candidate
+        if: steps.sync.outputs.changed == 'true'
+        run: node tools/sync-public-site.mjs --verify-current
+
+      - name: Publish the current public generation
+        if: steps.sync.outputs.changed == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Record that publication was unnecessary
+        if: steps.sync.outputs.changed == 'false'
+        run: echo 'Sites generation and renderer revision are unchanged; no Pages artifact was uploaded or deployed.' >> "$GITHUB_STEP_SUMMARY"

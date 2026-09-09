@@ -1,0 +1,8 @@
+node_modules/
+.build/
+.cache/
+outputs/
+frontend/assets/
+.env
+.env.*
+*.log

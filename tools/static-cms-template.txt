@@ -1,0 +1,54 @@
+import publicData from './public-data.json';
+import migrated from './migrated-content.json';
+import { markdownToHtml } from '@/lib/markdown';
+import type { EditorialEntry, EditorialType, SearchRecord } from '@/lib/editorial';
+import { defaultSiteSettings, type SiteSettings } from '@/lib/site-settings';
+
+export { defaultSiteSettings, type SiteSettings } from '@/lib/site-settings';
+export type CmsEntry = EditorialEntry & {
+  id: string; status: 'published'; createdAt: string; updatedAt: string; publishedAt: string | null;
+  releaseId: string; originalHtml?: string;
+};
+export type PublicEntrySummary = Omit<CmsEntry, 'body' | 'html' | 'originalHtml'>;
+const entries: CmsEntry[] = publicData.entries.map(entry => ({
+  ...entry, type: entry.type as EditorialType, language: entry.language as 'en' | 'zh', status: 'published',
+  html: markdownToHtml(entry.body),
+}));
+const coreRoutes: Record<string, string> = { home: '/', about: '/about', bstvc: '/bstvc', research: '/research', publications: '/publications', resources: '/resources', news: '/news', journal: '/blogs' };
+function route(entry: Pick<CmsEntry, 'type' | 'slug'>) {
+  if (entry.type === 'page') return Object.hasOwn(coreRoutes, entry.slug) ? coreRoutes[entry.slug] : `/${encodeURIComponent(entry.slug)}`;
+  const prefix = { news: 'news', publication: 'publications', journal: 'blogs', research: 'research', resource: 'resources' }[entry.type];
+  return `/${prefix}/${encodeURIComponent(entry.slug)}`;
+}
+export async function getPublishedEntries(type: EditorialType) { return entries.filter(entry => entry.type === type); }
+export const getPublishedEntriesOrFallback = getPublishedEntries;
+export async function getPublishedEntry(type: EditorialType, slug: string) { return entries.find(entry => entry.type === type && entry.slug === slug); }
+export const getPublishedEntryOrFallback = getPublishedEntry;
+export async function getPublishedEntrySummaries(type: EditorialType): Promise<PublicEntrySummary[]> {
+  return (await getPublishedEntries(type)).map(({ body: _body, html: _html, ...summary }) => summary);
+}
+export const getPublishedEntrySummariesOrFallback = getPublishedEntrySummaries;
+// Compatibility for the existing public blog route. No private entry is ever loaded.
+// Bundled blogs with ANY managed identity were removed during public-data selection.
+export async function getStudioEntry(id: string) { return entries.find(entry => entry.id === id) ?? null; }
+export async function seedCmsIfEmpty() { /* Static mode never creates or loads seed data. */ }
+export async function getSiteSettings(): Promise<SiteSettings> { return { ...defaultSiteSettings, ...publicData.settings } as SiteSettings; }
+export async function getSiteLastUpdated() { return new Date(publicData.lastUpdated); }
+export function hasManagedCorePage(slug: string) { return publicData.managedCorePages.includes(slug); }
+export type HomepageUpdate = { type: EditorialType; slug: string; title: string; date: string | null; updated: string | null; section: string; href: string };
+export async function getHomepageUpdates(limit = 6): Promise<HomepageUpdate[]> {
+  const sections: Record<string, string> = { news: 'News', publication: 'Publications', journal: 'Blogs', research: 'Research', resource: 'Resources' };
+  const updates: HomepageUpdate[] = entries.filter(entry => entry.type !== 'page').map(entry => ({
+    type: entry.type, slug: entry.slug, title: entry.title, date: entry.date, updated: entry.updated, section: sections[entry.type], href: route(entry),
+  }));
+  updates.push(...migrated.posts.map(post => ({ type: 'journal' as const, slug: post.slug, title: post.title, date: post.date, updated: post.modified ?? post.date, section: 'Blogs', href: `/blogs/${encodeURIComponent(post.slug)}` })));
+  return updates.sort((a, b) => (b.date ?? b.updated ?? '').localeCompare(a.date ?? a.updated ?? '') || a.title.localeCompare(b.title)).slice(0, Math.min(12, Math.max(1, limit)));
+}
+function plainText(html: string) { return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
+export async function buildDynamicSearchIndex(): Promise<SearchRecord[]> {
+  return [
+    ...entries.map(entry => ({ title: entry.title, summary: entry.summary, body: entry.body, href: route(entry), type: entry.type, language: entry.language, date: entry.date })),
+    ...migrated.pages.map(page => ({ title: page.title, summary: page.headings.slice(0, 4).join(' · '), body: plainText(page.contentHtml), href: `/archive/${encodeURIComponent(page.slug)}`, type: 'archive page', language: page.language as 'en' | 'zh', date: page.modified })),
+    ...migrated.posts.map(post => ({ title: post.title, summary: post.headings.slice(0, 4).join(' · '), body: plainText(post.contentHtml), href: `/blogs/${encodeURIComponent(post.slug)}`, type: 'journal archive', language: post.language as 'en' | 'zh', date: post.date })),
+  ];
+}

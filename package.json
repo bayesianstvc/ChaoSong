@@ -1,0 +1,34 @@
+{
+  "name": "chaosong-public-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "node tools/build-static.mjs && node tools/finalize-static.mjs",
+    "test": "node --test tools/tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
+    "embla-carousel": "8.6.0",
+    "katex": "0.18.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "sharp": "0.35.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.34",
+    "react-server-dom-webpack": "19.2.8",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3",
+    "vinext": "1.0.0-beta.9",
+    "vite": "8.2.2"
+  }
+}
