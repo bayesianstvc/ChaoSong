@@ -4,7 +4,7 @@
 
 - 编辑来源：[Sites](https://chaosong.heoa-group.chatgpt.site/)
 - 只读公开导出：[public-export](https://chaosong.heoa-group.chatgpt.site/api/public-export)
-- Pages 目标：[ChaoSong](https://bayesianstvc.github.io/ChaoSong/)
+- Pages 目标：[ChaoSong](https://chaosong.blog/)
 
 这些链接说明部署目标，不代表本说明已经确认首次自动同步部署成功。
 
@@ -49,3 +49,7 @@ node tools/sync-public-site.mjs
 仓库 Pages 的构建来源应设为 **GitHub Actions**，允许 Actions 运行，且默认分支为 `main`。同步源必须已提供兼容的 `formatVersion: 1` 与 `rendererContractVersion: 1` 公开导出。
 
 本说明未代替以下验收：首次定时触发成功、真实缓存复用、一次 Sites 内容更新后的端到端同步，以及无变化时实际跳过部署。应以仓库 Actions 运行记录、Pages 部署记录和线上 `release.json` 为证据。自定义域名与中国大陆不同网络的可访问性也需要单独确认。
+
+## 自定义域名
+
+正式站点为 https://chaosong.blog/，默认从根目录构建（空 basePath），页面、媒体、CSS、JavaScript 与发布核验均使用该域名。不要在生产工作流设置旧仓库前缀。STATIC_BASE_PATH 仅供明确需要子目录的本地构建使用。

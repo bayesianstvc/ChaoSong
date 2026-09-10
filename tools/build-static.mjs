@@ -11,7 +11,7 @@ const taskDir = path.join(projectRoot, '.build');
 if (!process.env.PUBLIC_INPUT || !process.env.MEDIA_CATALOG) throw new Error('PUBLIC_INPUT and MEDIA_CATALOG are required');
 const publicInputPath = path.resolve(process.env.PUBLIC_INPUT);
 const mediaCatalogPath = path.resolve(process.env.MEDIA_CATALOG);
-const basePath = process.env.STATIC_BASE_PATH ?? '/ChaoSong';
+const basePath = process.env.STATIC_BASE_PATH ?? '';
 if (basePath && !/^\/[a-zA-Z0-9_-]+$/.test(basePath)) throw new Error('Invalid static base path');
 const stage = path.join(taskDir, 'build-' + new Date().toISOString().replace(/[:.]/g, '-'));
 const slash = p => p.replaceAll('\\', '/');
@@ -74,7 +74,7 @@ await write(path.join(stage,'asset-map.json'),JSON.stringify(urlMap,null,2));
 
 const appPublic=path.join(stage,'app/(public)');
 let layout=await readFile(path.join(appPublic,'layout.tsx'),'utf8');
-layout=layout.replace('import { headers } from "next/headers";','').replace(/async function requestOrigin\(\) \{[\s\S]*?\n\}/,'async function requestOrigin() { return "https://bayesianstvc.github.io/"; }').replace('import { SiteAnalytics } from "@/components/site-analytics";','').replace('<SiteAnalytics />','');
+layout=layout.replace('import { headers } from "next/headers";','').replace(/async function requestOrigin\(\) \{[^}]*\}/,'async function requestOrigin() { return "https://chaosong.blog/"; }').replace('import { SiteAnalytics } from "@/components/site-analytics";','').replace('<SiteAnalytics />','');
 await write(path.join(appPublic,'layout.tsx'),layout);
 await cp(path.join(repoRoot,'collection-templates'),appPublic,{recursive:true});
 await write(path.join(stage,'components/static-redirect.tsx'),`"use client";\nimport {useEffect} from 'react';\nexport function StaticRedirect({href}:{href:string}) { const target=${JSON.stringify(basePath)}+href; useEffect(()=>{window.location.replace(target+window.location.search+window.location.hash);},[target]); return <><meta httpEquiv="refresh" content={'0;url='+target}/><p><a href={target}>Continue to the current page</a></p></>; }\n`);

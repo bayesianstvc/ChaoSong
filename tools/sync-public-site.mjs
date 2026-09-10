@@ -7,7 +7,7 @@ import {syncMedia} from './sync-media.mjs';
 import {syncStaticAssets} from './sync-static-assets.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const api='https://chaosong.heoa-group.chatgpt.site/api/public-export';
-const live='https://bayesianstvc.github.io/ChaoSong/release.json';
+const live='https://chaosong.blog/release.json';
 const buildDir=path.join(root,'.build');
 await mkdir(buildDir,{recursive:true});
 async function getJson(url){

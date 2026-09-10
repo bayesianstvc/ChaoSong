@@ -8,7 +8,7 @@ import { ContentGalleryController } from "@/components/content-gallery-controlle
 import { getSiteSettings } from "@/lib/cms";
 import { siteAssetUrl } from "@/lib/site-settings";
 
-async function requestOrigin() { return "https://bayesianstvc.github.io/"; }
+async function requestOrigin() { return "https://chaosong.blog/"; }
 
 export async function generateMetadata(): Promise<Metadata> {
   const [origin, settings] = await Promise.all([requestOrigin(), getSiteSettings()]);

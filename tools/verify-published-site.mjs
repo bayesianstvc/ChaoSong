@@ -2,7 +2,7 @@ import { readFile, appendFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const RELEASE_URL = 'https://bayesianstvc.github.io/ChaoSong/release.json';
+export const RELEASE_URL = 'https://chaosong.blog/release.json';
 const maxResponseBytes = 64 * 1024;
 
 function validateIdentity(release) {
