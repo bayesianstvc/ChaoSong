@@ -3028,6 +3028,15 @@ body {
 .content-gallery-controls button { width: 2.2rem; height: 2.2rem; border: 1px solid #d4d0c8; border-radius: 999px; background: white; color: #123a58; cursor: pointer; }
 .content-gallery:fullscreen { overflow: auto; padding: clamp(1rem,4vw,4rem); background: #f5f2eb; }
 .content-gallery:fullscreen .content-gallery-track > figure { flex-basis: min(92vw,1200px); }
+/* Fullscreen slides must fill the track even when an authored image has a size cap. */
+.content-gallery.content-slideshow:fullscreen .content-gallery-track > figure,
+.content-gallery.content-slideshow:fullscreen .content-gallery-embla-container > figure { flex: 0 0 100%; width: 100% !important; max-width: none !important; min-width: 0; margin: 0 !important; }
+.content-gallery.content-slideshow:fullscreen .content-gallery-track figure img { max-width: 100% !important; max-height: calc(100dvh - 12rem) !important; object-fit: contain; }
+html[data-theme="night"] .content-gallery:fullscreen { background: #182431; color: #edf4fb; border-color: #526474; }
+html[data-theme="night"] .content-gallery:fullscreen .content-gallery-caption,
+html[data-theme="night"] .content-gallery:fullscreen figcaption,
+html[data-theme="night"] .content-gallery:fullscreen figcaption small { color: #c9d5df; }
+html[data-theme="night"] .content-gallery:fullscreen .content-gallery-controls button { background: #243544; color: #edf4fb; border-color: #70889a; }
 @media (max-width: 700px) {
   .content-embed iframe { min-height: 58vh; }
   .content-gallery-track > figure { flex-basis: 94%; }
