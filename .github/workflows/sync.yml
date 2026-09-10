@@ -1,4 +1,5 @@
 name: Sync public content from Sites
+run-name: Sites sync / ${{ inputs.request_id || github.event_name }}
 
 on:
   workflow_dispatch:
@@ -8,9 +9,16 @@ on:
         required: false
         default: false
         type: boolean
+      request_id:
+        description: Optional Studio request identity for finding this run (letters, digits, underscore or hyphen; at most 80 characters)
+        required: false
+        default: ''
+        type: string
+  # BEGIN CHAOSONG_STUDIO_WEEKLY_SCHEDULE_V1
+  # studio-weekly: {"enabled":true,"weekday":1,"time":"09:07","timezone":"Asia/Shanghai"}
   schedule:
-    # UTC: avoid the top-of-hour scheduling peak.
-    - cron: '7,22,37,52 * * * *'
+    - cron: '7 1 * * 1'
+  # END CHAOSONG_STUDIO_WEEKLY_SCHEDULE_V1
 
 permissions:
   contents: read
@@ -31,6 +39,17 @@ jobs:
     env:
       FORCE_SYNC: ${{ inputs.force || false }}
     steps:
+      - name: Validate the Studio request identity
+        env:
+          STUDIO_REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          node --input-type=module <<'NODE'
+          const id = process.env.STUDIO_REQUEST_ID || '';
+          if (id && !/^[A-Za-z0-9_-]{1,80}$/.test(id)) {
+            throw new Error('Invalid Studio request identity');
+          }
+          NODE
+
       - name: Check out the public renderer
         uses: actions/checkout@v6
         with:
@@ -99,6 +118,10 @@ jobs:
         if: steps.sync.outputs.changed == 'true'
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify the published GitHub Pages release
+        if: steps.sync.outputs.changed == 'true'
+        run: node tools/verify-published-site.mjs
 
       - name: Record that publication was unnecessary
         if: steps.sync.outputs.changed == 'false'
