@@ -1,6 +1,7 @@
 import {readFile,writeFile,readdir,mkdir,cp,stat} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {validateStaticLinks} from './static-link-validation.mjs';
 const taskDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../.build');
 const info=JSON.parse(await readFile(path.join(taskDir,'latest-build.json'),'utf8'));
 const input=path.join(info.stage,'dist/client',info.basePath);
@@ -22,19 +23,19 @@ await writeFile(path.join(output,'.nojekyll'),'','utf8');
 manifest.push({path:'.nojekyll',bytes:0});
 const htmls=manifest.filter(x=>x.path.endsWith('.html'));
 const problems=[];
-for(const file of htmls){const html=await readFile(path.join(output,file.path),'utf8');for(const match of html.matchAll(/\b(?:src|href|poster)=["']([^"']+)["']/g)){
- const raw=match[1].replaceAll('&amp;','&');if(!raw.startsWith('/')||raw.startsWith('//'))continue;
- let target=decodeURIComponent(raw.split(/[?#]/)[0]);
- if(info.basePath && !(target===info.basePath||target.startsWith(info.basePath+'/'))){problems.push({page:file.path,url:raw,reason:'missing base path'});continue;}
- target=target.slice(info.basePath.length)||'/';const dest=path.join(output,target);try{const s=await stat(dest);if(s.isDirectory())await stat(path.join(dest,'index.html'));}catch{problems.push({page:file.path,url:raw,reason:'missing static file'});}
- }
+const warnings=[];
+const filePaths=new Set(manifest.map(file=>file.path));
+for(const file of htmls){const html=await readFile(path.join(output,file.path),'utf8');
+ const checked=validateStaticLinks({html,page:file.path,basePath:info.basePath,filePaths});
+ problems.push(...checked.problems);warnings.push(...checked.warnings);
  if(/\b(?:src|poster)=["'][^"']*(?:chatgpt\.site|chaosong\.blog)/.test(html))problems.push({page:file.path,reason:'live source media dependency'});
  if(/(?:BACKUP_SITE_RESTORE|STUDIO_BACKUP_RESTORE_TOKEN|password_hash|"originalBody"|"bodyDocument"|\/api\/studio\/)/.test(html))problems.push({page:file.path,reason:'non-public marker'});
 }
-const report={createdAt:new Date().toISOString(),source:input,site:output,basePath:info.basePath,generation:info.generation,files:manifest.length,bytes:manifest.reduce((n,f)=>n+f.bytes,0),htmlPages:htmls.length,excludedUnreferencedFiles:files.length-selected.size,problems};
+const report={createdAt:new Date().toISOString(),source:input,site:output,basePath:info.basePath,generation:info.generation,files:manifest.length,bytes:manifest.reduce((n,f)=>n+f.bytes,0),htmlPages:htmls.length,excludedUnreferencedFiles:files.length-selected.size,problems,warnings};
 try{const catalog=JSON.parse(await readFile(path.join(info.stage,'media-catalog.json'),'utf8'));const chosen=new Map();for(const asset of catalog.assets)if(manifest.some(f=>f.path==='media/'+path.basename(asset.outputPath)))chosen.set(asset.sourceSha256,asset);const originals=[...chosen.values()].reduce((n,a)=>n+a.sourceBytes,0);const derivatives=[...chosen.values()].reduce((n,a)=>n+a.outputBytes,0);report.media={uniqueFiles:chosen.size,sourceBytes:originals,publishedBytes:derivatives,savedBytes:originals-derivatives,savedPercent:Number(((originals-derivatives)/originals*100).toFixed(2)),losslessOptimized:[...chosen.values()].filter(a=>a.mode!=='original-preserved').length,qualityPolicy:'Original dimensions, exact sRGB decoded pixels or original bytes; no lossy photo candidates published'};}catch(e){if(e.code!=='ENOENT')throw e;}
 await writeFile(path.join(info.stage,'static-verification.json'),JSON.stringify(report,null,2)+'\n','utf8');
 await writeFile(path.join(info.stage,'public-file-manifest.json'),JSON.stringify(manifest,null,2)+'\n','utf8');
+for(const warning of warnings)console.warn('STATIC_NAVIGATION_WARNING',JSON.stringify(warning));
 if(problems.length){console.log(JSON.stringify(report,null,2));throw new Error('Static closure validation failed');}
 await writeFile(path.join(taskDir,'latest-preview.json'),JSON.stringify({...info,site:output,report:path.join(info.stage,'static-verification.json')},null,2)+'\n','utf8');
 console.log(JSON.stringify(report,null,2));
