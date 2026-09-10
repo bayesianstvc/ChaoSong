@@ -15,7 +15,9 @@ on:
         default: ''
         type: string
   # BEGIN CHAOSONG_STUDIO_WEEKLY_SCHEDULE_V1
-  # studio-weekly: {"enabled":false,"weekday":1,"time":"09:07","timezone":"Asia/Shanghai"}
+  # studio-weekly: {"enabled":true,"weekday":1,"time":"09:07","timezone":"Asia/Shanghai"}
+  schedule:
+    - cron: '7 1 * * 1'
   # END CHAOSONG_STUDIO_WEEKLY_SCHEDULE_V1
 
 permissions:
