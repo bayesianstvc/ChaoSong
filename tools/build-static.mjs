@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { preparePublicInput } from './prepare-public-input.mjs';
 import { selectMediaAliases } from './media-aliases.mjs';
+import { installPublishedMetadata } from './v34-route-metadata.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.join(projectRoot, 'frontend');
@@ -107,6 +108,12 @@ for(const [route,values] of Object.entries(routeParams)) {
   src+='\nexport function generateStaticParams() { return '+JSON.stringify(values.map(v=>({[key]:v})))+'; }\n';
   await write(p,src);
 }
+// Metadata uses the same published entry as the body, including during hydration.
+for (const [route,type,slug] of [
+ ['page.tsx','page','home'],['about/page.tsx','page','about'],['bstvc/page.tsx','page','bstvc'],['research/page.tsx','page','research'],['publications/page.tsx','page','publications'],['resources/page.tsx','page','resources'],['news/page.tsx','page','news'],['blogs/page.tsx','page','journal'],
+ ['[slug]/page.tsx','page',null],['pages/[slug]/page.tsx','page',null],['news/[slug]/page.tsx','news',null],['publications/[slug]/page.tsx','publication',null],['research/[slug]/page.tsx','research',null],['resources/[slug]/page.tsx','resource',null],['blogs/[slug]/page.tsx','journal',null],
+ ['search/page.tsx','search',''],['archive/page.tsx','archive',''],['archive/[slug]/page.tsx','archive',null]
+]) {const file=path.join(appPublic,route);await write(file,installPublishedMetadata(await readFile(file,'utf8'),type,slug));}
 let migrated=await readFile(path.join(stage,'components/migrated-page.tsx'),'utf8');
 migrated=migrated.replace('getPublishedEntriesOrFallback, getPublishedEntryOrFallback','hasManagedCorePage, getPublishedEntriesOrFallback, getPublishedEntryOrFallback');
 migrated=migrated.replace(/const completeHtml = [\s\S]*?\n  return \(/,'const completeHtml = managedSlug && hasManagedCorePage(managedSlug) ? managedHtml : bundledHtml;\n  return (');
@@ -115,9 +122,6 @@ await write(path.join(stage,'components/migrated-page.tsx'),migrated);
 let publications=await readFile(path.join(appPublic,'publications/page.tsx'),'utf8');
 publications=publications.replace('page && !page.sourcePath.startsWith("builtin:") ? page.html : source.contentHtml','page?.html ?? ""');
 await write(path.join(appPublic,'publications/page.tsx'),publications);
-let search=await readFile(path.join(stage,'components/search-client.tsx'),'utf8');
-search=search.replace(/  useEffect\(\(\) => \{[\s\S]*?\n  \}, \[query\]\);/,'');
-await write(path.join(stage,'components/search-client.tsx'),search);
 let footer=await readFile(path.join(stage,'components/site-footer.tsx'),'utf8');
 await write(path.join(stage,'components/site-footer.tsx'),footer.replace('href="/studio"','href="https://chaosong.heoa-group.chatgpt.site/studio"'));
 let href=await readFile(path.join(stage,'lib/public-href.ts'),'utf8');
@@ -134,7 +138,7 @@ for(const p of [...await walk(path.join(stage,'app')),...await walk(path.join(st
   if(/\.(tsx?|css|json)$/.test(p)) {let source=await readFile(p,'utf8');if(!p.endsWith('site-settings.ts'))source=rewriteAssets(source);else {const index=source.indexOf('\n');source=source.slice(0,index)+rewriteAssets(source.slice(index));}if(p.includes(path.join('app','(public)')))source=source.replace(/canonical:\s*(["'`])\//g,(_,quote)=>'canonical: '+quote+basePath+'/');await write(p,source);}
 }
 let adapter=await readFile(publicData.files.cmsAdapter,'utf8');
-adapter='const STATIC_URL_MAP: Record<string,string> = '+JSON.stringify(urlMap)+';\nfunction localizeHtml(html:string){return html.replace(/\\/cms-media\\/[^\\s"\'<>?]+/g, url => STATIC_URL_MAP[url] ?? url);}\n'+adapter.replace('html: markdownToHtml(entry.body)','html: localizeHtml(markdownToHtml(entry.body))');
+adapter='const STATIC_URL_MAP: Record<string,string> = '+JSON.stringify(urlMap)+';\nfunction localizeHtml(html:string){return html.replace(/\\/cms-media\\/[^\\s"\'<>?]+/g, url => STATIC_URL_MAP[url] ?? url);}\n'+adapter.replace('html: renderPublicBody(entry)','html: localizeHtml(renderPublicBody(entry))');
 await write(publicData.files.cmsAdapter,adapter);
 // Imported public HTML may itself reference local media.
 for(const p of await walk(path.join(stage,'public')))if(/\.(html|css|svg)$/.test(p))await write(p,rewriteAssets(await readFile(p,'utf8')));

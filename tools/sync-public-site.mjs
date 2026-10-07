@@ -6,7 +6,7 @@ import {validatePublicInput} from './prepare-public-input.mjs';
 import {syncMedia} from './sync-media.mjs';
 import {syncStaticAssets} from './sync-static-assets.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const api='https://chaosong.heoa-group.chatgpt.site/api/public-export';
+const api='https://chaosong.heoa-group.chatgpt.site/api/public-export?renderer=v34';
 const live='https://chaosong.blog/release.json';
 const buildDir=path.join(root,'.build');
 await mkdir(buildDir,{recursive:true});
@@ -54,7 +54,7 @@ const report=JSON.parse(await readFile(candidate.report,'utf8'));
 if(report.problems.length||report.bytes>800_000_000)throw new Error('Candidate violates validation or 800 MB publication budget');
 const latest=validatePublicInput(await getJson(api));
 if(latest.generation!==generation)throw new Error('Source changed while building; previous publication retained');
-const release={formatVersion:1,generation,rendererRevision,publishedAt:new Date().toISOString(),sourceUpdatedAt:input.data.lastUpdated,entries:input.data.entries.length,bytes:report.bytes,files:report.files+1,mediaCorrections:catalog.assets.filter(asset=>asset.correction).map(asset=>({assetId:asset.id,correction:asset.correction.id,sourceSha256:asset.correction.badSha256,publishedSha256:asset.sourceSha256}))};
+const release={formatVersion:1,generation,rendererRevision,sourceUrl:api,publishedAt:new Date().toISOString(),sourceUpdatedAt:input.data.lastUpdated,entries:input.data.entries.length,bytes:report.bytes,files:report.files+1,mediaCorrections:catalog.assets.filter(asset=>asset.correction).map(asset=>({assetId:asset.id,correction:asset.correction.id,sourceSha256:asset.correction.badSha256,publishedSha256:asset.sourceSha256}))};
 for(let i=0;i<8;i++){const total=report.bytes+Buffer.byteLength(JSON.stringify(release,null,2)+'\n');if(total===release.bytes)break;release.bytes=total;}
 await writeFile(path.join(candidate.site,'release.json'),JSON.stringify(release,null,2)+'\n');
 await writeFile(path.join(buildDir,'candidate-release.json'),JSON.stringify(release,null,2)+'\n');

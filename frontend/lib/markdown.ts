@@ -1,4 +1,5 @@
 import katex from "katex";
+import { decodeHtmlEntities } from "./html-entities.ts";
 
 const MEDIA_SIZES = new Set(["small", "medium", "large", "full"]);
 const MEDIA_ALIGNS = new Set(["left", "center", "right"]);
@@ -13,13 +14,7 @@ function escapeHtml(value: string) {
 }
 
 function decodeEntities(value: string) {
-  return value
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0?39;|&apos;/gi, "'");
+  return decodeHtmlEntities(value).replaceAll("\u00a0", " ");
 }
 
 function safeHref(value: string) {
@@ -42,7 +37,7 @@ function mediaSource(value: string) {
 function blockAttribute(value: string | undefined, name: string) {
   const normalized = value?.replace(/&quot;/gi, '"').replace(/&#0?39;/gi, "'");
   const match = normalized?.match(new RegExp(`(?:^|\\s)${name}=(?:"([^"]*)"|'([^']*)'|([^\\s}]+))`, "i"));
-  return match?.[1] ?? match?.[2] ?? match?.[3] ?? "";
+  return decodeEntities(match?.[1] ?? match?.[2] ?? match?.[3] ?? "");
 }
 
 function mediaSize(value: string | undefined) {
@@ -54,12 +49,18 @@ function mediaAlign(value: string | undefined) {
 }
 
 function renderInline(value: string) {
-  return escapeHtml(value)
+  // Code is literal text: entities and Markdown syntax inside it must not be interpreted.
+  const code: string[] = [];
+  const source = value.replace(/`([^`]+)`/g, (_match, text) => {
+    code.push(`<code>${escapeHtml(text)}</code>`);
+    return `\uE000STUDIOCODE${code.length - 1}\uE001`;
+  });
+  return escapeHtml(decodeHtmlEntities(source))
     .replace(/\{\{style size=(small|normal|large|xlarge) color=(#[0-9a-f]{6})\}\}([\s\S]*?)\{\{\/style\}\}/gi, (_match, size, color, text) => `<span class="content-text-style content-text-${size}" data-text-style="true" data-text-size="${size}" data-text-color="${color}" style="color:${color}">${text}</span>`)
     .replace(/@\[(PDF|VIDEO):([^\]]*)\]\(([^)]+)\)(?:\{([^}]*)\})?/gi, (_match, kind, label, src, attrs) => {
-      const source = mediaSource(src);
+      const source = mediaSource(decodeEntities(src));
       const safe = escapeHtml(source.href);
-      const safeLabel = escapeHtml(String(label).trim() || (kind.toUpperCase() === "PDF" ? "PDF" : "Video"));
+      const safeLabel = escapeHtml(decodeEntities(String(label)).trim() || (kind.toUpperCase() === "PDF" ? "PDF" : "Video"));
       const asset = source.assetId ? ` data-asset-id="${escapeHtml(source.assetId)}"` : "";
       const posterSource = blockAttribute(attrs, "poster");
       const poster = posterSource ? mediaSource(posterSource) : null;
@@ -73,9 +74,9 @@ function renderInline(value: string) {
         : `<figure${figureAttributes}><video src="${safe}" controls playsinline preload="metadata"${elementAttributes}${posterAttributes}><track kind="captions" src="data:text/vtt,WEBVTT" srcLang="en" label="Captions" /></video><figcaption>${safeLabel}</figcaption></figure>`;
     })
     .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+(?:&quot;([\s\S]*?)&quot;|&#039;([\s\S]*?)&#039;))?\)(?:\{([^}]*)\})?/g, (_match, alt, src, doubleTitle, singleTitle, attrs) => {
-      const source = mediaSource(src);
-      const safeAlt = escapeHtml(alt);
-      const title = doubleTitle ?? singleTitle;
+      const source = mediaSource(decodeEntities(src));
+      const safeAlt = escapeHtml(decodeEntities(alt));
+      const title = doubleTitle == null && singleTitle == null ? undefined : decodeEntities(doubleTitle ?? singleTitle);
       const safeTitle = title ? ` title="${escapeHtml(title)}"` : "";
       const normalizedSize = mediaSize(blockAttribute(attrs, "width"));
       const previewWidth = normalizedSize === "small" ? 640 : normalizedSize === "medium" ? 960 : 1280;
@@ -93,19 +94,19 @@ function renderInline(value: string) {
       return `<figure class="content-image content-image-${normalizedSize} content-align-${align}${figureNumber || figureLabel ? " content-research-figure" : ""}" data-align="${align}"${figureLabel ? ` id="${escapeHtml(figureLabel)}"` : ""}${asset}${researchAttrs}><img src="${safe}" alt="${safeAlt}" loading="lazy" data-size="${normalizedSize}" data-align="${align}"${asset}${researchAttrs}${safeTitle} />${caption}</figure>`;
     })
     .replace(/\[([^\]]+)\]\(([^)]+)\)(?:\{target=(_blank|_self)\})?/g, (_match, label, href, target) => {
-      const safe = escapeHtml(safeHref(href));
+      const safe = escapeHtml(safeHref(decodeEntities(href)));
       const targetAttributes = target === "_blank" ? ' target="_blank" rel="noreferrer"' : "";
       const crossReference = /^#(?:fig|table|eq)-[a-zA-Z0-9._-]+$/.test(href) ? ` class="content-cross-reference" data-reference-label="${escapeHtml(href.slice(1))}"` : "";
       return `<a href="${safe}"${crossReference}${targetAttributes}>${label}</a>`;
     })
     .replace(/\[@([^\]]+)\]/g, '<cite class="citation" data-cite="$1">[$1]</cite>')
     .replace(/\[\^([^\]]+)\]/g, '<sup class="footnote-ref"><a href="#fn-$1" id="fnref-$1">$1</a></sup>')
-    .replace(/\$([^$\n]+)\$/g, (_match, expression) => `<studio-math-inline class="math-inline" role="math" aria-label="${escapeHtml(expression)}">${renderMath(expression, false)}</studio-math-inline>`)
+    .replace(/\$([^$\n]+)\$/g, (_match, expression) => `<studio-math-inline class="math-inline" role="math" aria-label="${escapeHtml(decodeEntities(expression))}">${renderMath(decodeEntities(expression), false)}</studio-math-inline>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
     .replace(/~~([^~]+)~~/g, "<del>$1</del>")
     .replace(/\+\+([^+]+)\+\+/g, "<u>$1</u>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>");
+    .replace(/\uE000STUDIOCODE(\d+)\uE001/g, (_match, index) => code[Number(index)] ?? "");
 }
 
 function isTableDivider(value: string) {
@@ -281,7 +282,7 @@ export function markdownToHtml(markdown: string) {
       output.push(`<div class="content-table-wrap"><table><thead><tr>${header.map((cell) => `<th>${renderInline(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${header.map((_, cellIndex) => `<td>${renderInline(row[cellIndex] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
       continue;
     }
-    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
       flush();
       const level = heading[1].length;
@@ -319,8 +320,8 @@ export function markdownToHtml(markdown: string) {
 }
 
 function attribute(value: string, name: string) {
-  const match = value.match(new RegExp(`(?:^|\\s)${name}=["']([^"']*)["']`, "i"));
-  return match?.[1] ?? "";
+  const match = value.match(new RegExp(`(?:^|\\s)${name}=(?:"([^"]*)"|'([^']*)')`, "i"));
+  return decodeEntities(match?.[1] ?? match?.[2] ?? "");
 }
 
 function plainText(value: string) {
@@ -328,7 +329,12 @@ function plainText(value: string) {
 }
 
 function inlineHtmlToMarkdown(value: string): string {
-  return decodeEntities(value)
+  const code: string[] = [];
+  const source = value.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_match, text) => {
+    code.push(`\`${decodeEntities(text.replace(/<[^>]+>/g, ""))}\``);
+    return `\uE000STUDIOHTMLCODE${code.length - 1}\uE001`;
+  });
+  const result = source
     .replace(/<span\b([^>]*)data-text-style=["']true["']([^>]*)>([\s\S]*?)<\/span>/gi, (_match, before, after, text) => {
       const attrs = `${before} ${after}`;
       const sizeValue = attribute(attrs, "data-text-size");
@@ -354,7 +360,6 @@ function inlineHtmlToMarkdown(value: string): string {
     .replace(/<(?:em|i)\b[^>]*>([\s\S]*?)<\/(?:em|i)>/gi, "*$1*")
     .replace(/<u\b[^>]*>([\s\S]*?)<\/u>/gi, "++$1++")
     .replace(/<(?:del|s|strike)\b[^>]*>([\s\S]*?)<\/(?:del|s|strike)>/gi, "~~$1~~")
-    .replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_match, code) => `\`${plainText(code)}\``)
     .replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (_match, attrs, text) => {
       const href = attribute(attrs, "href");
       if (!href) return inlineHtmlToMarkdown(text);
@@ -364,14 +369,15 @@ function inlineHtmlToMarkdown(value: string): string {
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/[ \t]+/g, " ");
+  return decodeEntities(result).replace(/\uE000STUDIOHTMLCODE(\d+)\uE001/g, (_match, index) => code[Number(index)] ?? "");
 }
 
-function imageMarkdown(attrs: string, fallbackSize?: string, fallbackAlign?: string) {
+function imageMarkdown(attrs: string, fallbackSize?: string, fallbackAlign?: string, caption?: string) {
   const assetId = attribute(attrs, "data-asset-id");
   const src = assetId ? `asset:${assetId}` : attribute(attrs, "src") || attribute(attrs, "data-src");
   if (!src) return "";
   const alt = attribute(attrs, "alt").replaceAll("[", "\\[").replaceAll("]", "\\]");
-  const title = attribute(attrs, "title");
+  const title = caption ?? attribute(attrs, "title");
   const size = mediaSize(attribute(attrs, "data-size") || fallbackSize);
   const requestedAlign = attribute(attrs, "data-align") || fallbackAlign || "center";
   const align = mediaAlign(requestedAlign);
@@ -380,6 +386,31 @@ function imageMarkdown(attrs: string, fallbackSize?: string, fallbackAlign?: str
   const figureSource = attribute(attrs, "data-figure-source");
   const research = `${figureNumber ? ` figure=${figureNumber}` : ""}${figureLabel ? ` label=${figureLabel}` : ""}${figureSource ? ` source="${figureSource.replaceAll('"', "&quot;")}"` : ""}`;
   return `![${alt}](${src}${title ? ` "${title.replaceAll('"', "&quot;")}"` : ""}){width=${size} align=${align}${research}}`;
+}
+
+function figureMarkdown(attrs: string, inner: string) {
+  const image = inner.match(/<img\b([^>]*)>/i);
+  if (!image) return "";
+  const classes = attribute(attrs, "class");
+  const fallbackSize = classes.match(/content-image-(small|medium|large|full)/i)?.[1];
+  const fallbackAlign = classes.match(/content-align-(left|center|right)/i)?.[1] || attribute(attrs, "data-align");
+  let imageAttrs = image[1];
+  for (const name of ["data-asset-id", "data-figure-number", "data-figure-label", "data-figure-source"]) {
+    const value = attribute(attrs, name) || (name === "data-figure-label" ? attribute(attrs, "id") : "");
+    if (value && !attribute(imageAttrs, name)) imageAttrs += ` ${name}="${escapeHtml(value)}"`;
+  }
+  const caption = inner.match(/<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/i);
+  // Caption DOM is authoritative, including the empty string. Generated metadata is separate.
+  const text = caption ? plainText(caption[1]
+    .replace(/<span\b[^>]*class=["'][^"']*content-figure-number[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, "")
+    .replace(/<small\b[^>]*>[\s\S]*?<\/small>/gi, "")) : undefined;
+  return imageMarkdown(imageAttrs, fallbackSize, fallbackAlign, text);
+}
+
+function galleryImageMarkdown(inner: string) {
+  return [...inner.matchAll(/<figure\b([^>]*)>([\s\S]*?)<\/figure>|<img\b([^>]*)>/gi)]
+    .map((match) => match[3] !== undefined ? imageMarkdown(match[3]) : figureMarkdown(match[1], match[2]))
+    .filter(Boolean);
 }
 
 function tableToMarkdown(inner: string) {
@@ -417,7 +448,14 @@ export function htmlToMarkdown(value: string) {
   html = html.replace(/<pre\b[^>]*>\s*<code\b([^>]*)>([\s\S]*?)<\/code>\s*<\/pre>/gi, (_match, attrs, code) => {
     const className = attribute(attrs, "class");
     const language = className.match(/(?:^|\s)language-([^\s]+)/i)?.[1] ?? "";
-    return stash(`\`\`\`${language}\n${decodeEntities(code).replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")}\n\`\`\``);
+    return stash(`\`\`\`${language}\n${decodeEntities(code.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""))}\n\`\`\``);
+  });
+
+  // Keep literal inline code outside subsequent paragraph/list passes and entity decoding.
+  html = html.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_match, code) => {
+    const token = `@@STUDIOBLOCK${tokens.length}@@`;
+    tokens.push(`\`${decodeEntities(code.replace(/<[^>]+>/g, ""))}\``);
+    return token;
   });
 
   html = html.replace(/<figure\b([^>]*)class=["']([^"']*content-(?:pdf|video)[^"']*)["']([^>]*)>([\s\S]*?)<\/figure>/gi, (_match, before, classes, after, inner) => {
@@ -438,7 +476,7 @@ export function htmlToMarkdown(value: string) {
 
   html = html.replace(/<section\b([^>]*)class=["'][^"']*content-gallery[^"']*["']([^>]*)>([\s\S]*?)<\/section>/gi, (_match, before, after, inner) => {
     const attrs = `${before} ${after}`;
-    const images = [...String(inner).matchAll(/<img\b([^>]*)>/gi)].map((match) => imageMarkdown(match[1])).filter(Boolean);
+    const images = galleryImageMarkdown(String(inner));
     const layout = attribute(attrs, "data-gallery-layout") === "grid" ? "grid" : "carousel";
     const size = mediaSize(attribute(attrs, "data-gallery-size") || "medium");
     const frameValue = attribute(attrs, "data-gallery-frame");
@@ -446,13 +484,13 @@ export function htmlToMarkdown(value: string) {
     const autoplay = attribute(attrs, "data-gallery-autoplay") === "true";
     const interval = Math.max(3, Math.min(15, Number(attribute(attrs, "data-gallery-interval")) || 5));
     const caption = attribute(attrs, "data-gallery-caption");
-    const options = `${layout !== "carousel" ? ` layout=${layout}` : ""}${size !== "medium" ? ` size=${size}` : ""}${frame !== "compact" ? ` frame=${frame}` : ""}${autoplay ? ` autoplay=true interval=${interval}` : ""}${caption ? ` caption="${caption.replaceAll('"', "&quot;")}"` : ""}`;
+    const options = `${layout !== "carousel" ? ` layout=${layout}` : ""}${size !== "medium" ? ` size=${size}` : ""}${frame !== "compact" ? ` frame=${frame}` : ""}${autoplay ? ` autoplay=true interval=${interval}` : interval !== 5 ? ` interval=${interval}` : ""}${caption ? ` caption="${caption.replaceAll('"', "&quot;")}"` : ""}`;
     return images.length ? stash(`:::gallery${options ? ` {${options.trim()}}` : ""}\n${images.join("\n")}\n:::`) : "";
   });
 
   html = html.replace(/<div\b([^>]*)class=["'][^"']*content-gallery[^"']*["']([^>]*)>([\s\S]*?)<\/div>/gi, (_match, before, after, inner) => {
     const attrs = `${before} ${after}`;
-    const images = [...String(inner).matchAll(/<img\b([^>]*)>/gi)].map((match) => imageMarkdown(match[1])).filter(Boolean);
+    const images = galleryImageMarkdown(String(inner));
     const layout = attribute(attrs, "data-gallery-layout") === "grid" ? "grid" : "carousel";
     const size = mediaSize(attribute(attrs, "data-gallery-size") || "medium");
     const frameValue = attribute(attrs, "data-gallery-frame");
@@ -460,7 +498,7 @@ export function htmlToMarkdown(value: string) {
     const autoplay = attribute(attrs, "data-gallery-autoplay") === "true";
     const interval = Math.max(3, Math.min(15, Number(attribute(attrs, "data-gallery-interval")) || 5));
     const caption = attribute(attrs, "data-gallery-caption");
-    const options = `${layout !== "carousel" ? ` layout=${layout}` : ""}${size !== "medium" ? ` size=${size}` : ""}${frame !== "compact" ? ` frame=${frame}` : ""}${autoplay ? ` autoplay=true interval=${interval}` : ""}${caption ? ` caption="${caption.replaceAll('"', "&quot;")}"` : ""}`;
+    const options = `${layout !== "carousel" ? ` layout=${layout}` : ""}${size !== "medium" ? ` size=${size}` : ""}${frame !== "compact" ? ` frame=${frame}` : ""}${autoplay ? ` autoplay=true interval=${interval}` : interval !== 5 ? ` interval=${interval}` : ""}${caption ? ` caption="${caption.replaceAll('"', "&quot;")}"` : ""}`;
     return images.length ? stash(`:::gallery${options ? ` {${options.trim()}}` : ""}\n${images.join("\n")}\n:::`) : "";
   });
 
@@ -511,16 +549,7 @@ export function htmlToMarkdown(value: string) {
   html = html.replace(/<(?:div|hr)\b[^>]*data-page-break=["']true["'][^>]*(?:>[\s\S]*?<\/div>|\/?\s*>)/gi, () => stash("<!-- pagebreak -->"));
 
   html = html.replace(/<figure\b([^>]*)class=["']([^"']*content-image(?:-[^\s"']+)?[^"']*)["']([^>]*)>([\s\S]*?)<\/figure>/gi, (_match, before, classes, after, inner) => {
-    const image = inner.match(/<img\b([^>]*)>/i);
-    const fallbackSize = classes.match(/content-image-(small|medium|large|full)/i)?.[1];
-    const fallbackAlign = classes.match(/content-align-(left|center|right)/i)?.[1] || attribute(`${before} ${after}`, "data-align");
-    const figureAttrs = `${before} ${after}`;
-    const figureAssetId = attribute(figureAttrs, "data-asset-id");
-    const figureNumber = attribute(figureAttrs, "data-figure-number");
-    const figureLabel = attribute(figureAttrs, "data-figure-label") || attribute(figureAttrs, "id");
-    const figureSource = attribute(figureAttrs, "data-figure-source");
-    const imageAttrs = image ? `${image[1]}${figureAssetId && !attribute(image[1], "data-asset-id") ? ` data-asset-id="${figureAssetId}"` : ""}${figureNumber && !attribute(image[1], "data-figure-number") ? ` data-figure-number="${figureNumber}"` : ""}${figureLabel && !attribute(image[1], "data-figure-label") ? ` data-figure-label="${figureLabel}"` : ""}${figureSource && !attribute(image[1], "data-figure-source") ? ` data-figure-source="${figureSource}"` : ""}` : "";
-    return image ? stash(imageMarkdown(imageAttrs, fallbackSize, fallbackAlign)) : "";
+    return stash(figureMarkdown(`${before} class="${classes}" ${after}`, inner));
   });
 
   html = html.replace(/<ol\b[^>]*>([\s\S]*?)<\/ol>/gi, (_match, inner) => {
@@ -535,7 +564,7 @@ export function htmlToMarkdown(value: string) {
   html = html
     .replace(/<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>/gi, (_match, inner) => stash(inlineHtmlToMarkdown(inner).split(/\n+/).filter(Boolean).map((line) => `> ${line.trim()}`).join("\n")))
     .replace(/<hr\b[^>]*\/?\s*>/gi, () => stash("---"))
-    .replace(/<h([1-4])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (_match, level, inner) => stash(`${"#".repeat(Number(level))} ${inlineHtmlToMarkdown(inner).trim()}`))
+    .replace(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (_match, level, inner) => stash(`${"#".repeat(Number(level))} ${inlineHtmlToMarkdown(inner).trim()}`))
     .replace(/<img\b([^>]*)>/gi, (_match, attrs) => stash(imageMarkdown(attrs)))
     .replace(/<(?:p|div|section|article)\b[^>]*>([\s\S]*?)<\/(?:p|div|section|article)>/gi, (_match, inner) => `\n\n${inlineHtmlToMarkdown(inner)}\n\n`)
     .replace(/<br\s*\/?>/gi, "\n")

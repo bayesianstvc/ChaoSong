@@ -2,20 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { decodeHtmlEntities } from "@/lib/html-entities";
 
 type TocItem = { id: string; label: string; level: 2 | 3; page: number };
 
 const PAGE_BREAK_PATTERN = /<div\b[^>]*(?:data-page-break=["']true["']|class=["'][^"']*article-page-break[^"']*["'])[^>]*>[\s\S]*?<\/div>/gi;
 
 function plainText(value: string) {
-  return value
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
+  return decodeHtmlEntities(value.replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -40,8 +34,14 @@ function decorateHeadings(html: string) {
     const decoding = /\sdecoding=/i.test(normalizedAttributes) ? "" : ' decoding="async"';
     return `<img${normalizedAttributes}${loading}${decoding}>`;
   });
-  const pages = mediaOptimized.split(PAGE_BREAK_PATTERN).map((pageHtml, page) => pageHtml.replace(/<h([23])([^>]*)>([\s\S]*?)<\/h\1>/gi, (_match, rawLevel: string, rawAttributes: string, content: string) => {
-    const level = Number(rawLevel) as 2 | 3;
+  const pages = mediaOptimized.split(PAGE_BREAK_PATTERN).map((pageHtml, page) => pageHtml.replace(/<(h[23]|p)([^>]*)>([\s\S]*?)<\/\1>/gi, (match, tag: string, rawAttributes: string, content: string) => {
+    // Migrated Publications uses bold TOPIC paragraphs, not heading tags.
+    // Recognize only an explicit leading TOPIC marker; never scan arbitrary spans,
+    // figure captions, or mathematical nodes as section titles.
+    const topic = tag.toLowerCase() === "p" && !/content-gallery-caption/i.test(rawAttributes) && /^\s*<(?:strong|b)\b/i.test(content)
+      && /^TOPIC\s+(?:[IVXLCDM]+|\d+)\s*[:：]/i.test(plainText(content));
+    if (tag.toLowerCase() === "p" && !topic) return match;
+    const level = tag.toLowerCase() === "h3" ? 3 : 2;
     const existingId = rawAttributes.match(/\sid=["']([^"']+)["']/i)?.[1];
     const base = existingId || slugify(content, items.length);
     const count = seen.get(base) ?? 0;
@@ -49,7 +49,7 @@ function decorateHeadings(html: string) {
     const id = count ? `${base}-${count + 1}` : base;
     const attributes = existingId ? rawAttributes.replace(/\sid=["'][^"']+["']/i, "") : rawAttributes;
     items.push({ id, label: plainText(content), level, page });
-    return `<h${level}${attributes} id="${id}">${content}</h${level}>`;
+    return `<${tag}${attributes} id="${id}">${content}</${tag}>`;
   }));
   return { html: pages.join(""), items, pages };
 }
@@ -107,8 +107,8 @@ export function OriginalContentToc({ html, language, railFooter }: { html: strin
 
   return (
     <div className="original-reading-layout">
-      <nav className="original-toc" aria-label="Table of contents">
-        <p>On this page</p>
+      <nav className="original-toc" aria-label={prepared.items.length ? "Table of contents" : "Reading tools"}>
+        {prepared.items.length ? <p>On this page</p> : null}
         {prepared.items.length ? prepared.items.map((item, index) => (
           <a
             className={`${item.level === 3 ? "is-subsection" : ""} ${activeId === item.id ? "active" : ""} ${hasExplicitPages && item.page !== safePageIndex ? "is-other-page" : ""}`}
@@ -118,7 +118,7 @@ export function OriginalContentToc({ html, language, railFooter }: { html: strin
           >
             {item.label}
           </a>
-        )) : <span className="original-toc-empty">Article</span>}
+        )) : null}
         {hasExplicitPages ? <div className="long-article-pager" aria-label="Article page navigation">
           <span>Pages · {safePageIndex + 1}/{prepared.pages.length}</span>
           <div><button type="button" disabled={safePageIndex === 0} onClick={() => goToPage(safePageIndex - 1)}>Previous</button><button type="button" disabled={safePageIndex >= prepared.pages.length - 1} onClick={() => goToPage(safePageIndex + 1)}>Next</button></div>
@@ -130,7 +130,7 @@ export function OriginalContentToc({ html, language, railFooter }: { html: strin
         {railFooter ? <div className="original-rail-meta">{railFooter}</div> : null}
       </nav>
       <div ref={columnRef} className="source-prose-column">
-        {hasExplicitPages ? <p className="long-article-notice">This article is divided into {prepared.pages.length} pages. Use Previous / Next or the table of contents to move between pages.</p> : isLongArticle ? <p className="long-article-notice">Section navigation is enabled for this long article; the full text remains continuous.</p> : null}
+        {hasExplicitPages ? <p className="long-article-notice">This article is divided into {prepared.pages.length} pages. Use Previous / Next{prepared.items.length ? " or the table of contents" : ""} to move between pages.</p> : isLongArticle && prepared.items.length ? <p className="long-article-notice">Section navigation is enabled for this long article; the full text remains continuous.</p> : null}
         <div ref={articleRef} className="source-prose" lang={language} dangerouslySetInnerHTML={{ __html: prepared.pages[safePageIndex] ?? "" }} />
         {hasExplicitPages ? <nav className="article-page-navigation" aria-label="Article pages"><button type="button" disabled={safePageIndex === 0} onClick={() => goToPage(safePageIndex - 1)}>← Previous page</button><span>Page {safePageIndex + 1} of {prepared.pages.length}</span><button type="button" disabled={safePageIndex >= prepared.pages.length - 1} onClick={() => goToPage(safePageIndex + 1)}>Next page →</button></nav> : null}
         <div className="article-back-to-top"><button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>↑ Back to top</button></div>

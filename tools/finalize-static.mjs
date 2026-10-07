@@ -2,10 +2,14 @@ import {readFile,writeFile,readdir,mkdir,cp,stat} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {validateStaticLinks} from './static-link-validation.mjs';
+import {applyStaticMetadata, appendVisitorCollector, visitorScript} from './v34-static-support.mjs';
 const taskDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../.build');
 const info=JSON.parse(await readFile(path.join(taskDir,'latest-build.json'),'utf8'));
 const input=path.join(info.stage,'dist/client',info.basePath);
 const output=path.join(info.stage,'site');
+const publicData=JSON.parse(await readFile(path.join(info.stage,'data/public-data.json'),'utf8'));
+const migrated=JSON.parse(await readFile(path.join(info.stage,'data/migrated-content.json'),'utf8'));
+
 await mkdir(output); // Immutable candidate; never overwrite a reviewed directory.
 async function walk(dir){const all=[];for(const item of await readdir(dir,{withFileTypes:true})){const p=path.join(dir,item.name);if(item.isDirectory())all.push(...await walk(p));else all.push(p);}return all;}
 const slash=p=>p.replaceAll('\\','/');
@@ -17,7 +21,7 @@ for(const f of files)if(/\.(html|txt|js|css|json|svg)$/.test(f.rel))textFiles.se
 let changed=true;
 while(changed){changed=false;const text=[...selected].map(k=>textFiles.get(k)??'').join('\n');for(const f of candidates)if(!selected.has(f.rel)&&(text.includes(info.basePath+'/'+f.rel)||text.includes('/'+f.rel))){selected.add(f.rel);changed=true;}}
 const manifest=[];
-for(const f of files.filter(f=>selected.has(f.rel))){const rel=f.rel.split('/').map(p=>{const decoded=decodeURIComponent(p);if(/[\\/]/.test(decoded)||decoded==='..')throw new Error('Unsafe exported path');return decoded;}).join('/');const dest=path.join(output,rel);await mkdir(path.dirname(dest),{recursive:true});await cp(f.full,dest);manifest.push({path:rel,bytes:(await stat(dest)).size});}
+for(const f of files.filter(f=>selected.has(f.rel))){const rel=f.rel.split('/').map(p=>{const decoded=decodeURIComponent(p);if(/[\\/]/.test(decoded)||decoded==='..')throw new Error('Unsafe exported path');return decoded;}).join('/');const dest=path.join(output,rel);await mkdir(path.dirname(dest),{recursive:true});if(rel.endsWith('.html')){const html=await readFile(f.full,'utf8');await writeFile(dest,appendVisitorCollector(applyStaticMetadata(html,rel,publicData,info.basePath,migrated),visitorScript),'utf8');}else await cp(f.full,dest);manifest.push({path:rel,bytes:(await stat(dest)).size});}
 const fallback=path.join(info.stage,'dist/client/404.html');try{await cp(fallback,path.join(output,'404.html'));manifest.push({path:'404.html',bytes:(await stat(fallback)).size});}catch(e){if(e.code!=='ENOENT')throw e;}
 await writeFile(path.join(output,'.nojekyll'),'','utf8');
 manifest.push({path:'.nojekyll',bytes:0});

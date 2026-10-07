@@ -3058,3 +3058,34 @@ html[data-theme="night"] .content-gallery:fullscreen .content-gallery-controls b
   .editorial-article { grid-template-columns: 1fr; }
   .studio-library-toggle { display: none; }
 }
+
+/* V34: date and ancillary text must remain readable on night surfaces. */
+html[data-theme="night"] .timeline-list time,
+html[data-theme="night"] .journal-list time,
+html[data-theme="night"] .journal-index time,
+html[data-theme="night"] .journal-index a > p,
+html[data-theme="night"] .publication-list time,
+html[data-theme="night"] .managed-timeline small,
+html[data-theme="night"] .milestone-timeline time,
+html[data-theme="night"] .milestone-timeline p,
+html[data-theme="night"] .article-pagination-link time,
+html[data-theme="night"] .original-rail-meta dt,
+html[data-theme="night"] .original-rail-meta dd,
+html[data-theme="night"] .home-updates-rail time,
+html[data-theme="night"] .home-updates-rail span { color: #c9d5df; }
+html[data-theme="night"] .mobile-nav summary { color: #edf4fb; }
+html[data-theme="night"] .mobile-nav nav,
+html[data-theme="night"] .site-language-popover { background: #202e3b; background-image: none; border-color: #526474; color: #edf4fb; }
+html[data-theme="night"] .mobile-nav nav a,
+html[data-theme="night"] .site-language-popover p,
+html[data-theme="night"] .site-language-popover strong,
+html[data-theme="night"] .language-options button { color: #edf4fb; }
+
+
+/* V34 narrow reading tools: after base rules to preserve precedence. */
+@media (max-width:920px) {
+ .header-tools {display:flex;flex:0 0 auto;gap:.3rem;margin-left:.4rem;}
+ .header-tools .header-icon-button {width:34px;height:34px;}
+ .site-header {gap:.55rem;padding-inline:1rem;flex-wrap:wrap;}
+ .site-language-popover {position:fixed;top:82px;right:12px;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 100px);overflow-y:auto;}
+}

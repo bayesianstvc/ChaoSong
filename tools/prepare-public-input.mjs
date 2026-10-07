@@ -61,7 +61,8 @@ export function validatePublicInput(input) {
   sameStrings(data.managedCorePages, Object.keys(CORE_ROUTES), 'data.managedCorePages');
   array(data.entries, 'entries');
   for (const entry of data.entries) {
-    keys(entry, ENTRY_KEYS, 'entry');
+    keys(entry, [...ENTRY_KEYS, 'renderedHtml'], 'entry', ENTRY_KEYS);
+    if (Object.hasOwn(entry, 'renderedHtml')) string(entry.renderedHtml, 'entry.renderedHtml');
     if (!TYPES.includes(entry.type)) fail('unsupported entry type');
     slug(entry.slug, 'entry.slug');
     if (entry.type === 'page' && RESERVED_PAGE_SLUGS.has(entry.slug)) fail('page slug conflicts with a static application route');

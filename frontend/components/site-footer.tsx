@@ -2,6 +2,7 @@
 import { FullPageLink as Link } from "./full-page-link";
 import { getSiteSettings, getSiteLastUpdated } from "@/lib/cms";
 import { siteAssetUrl } from "@/lib/site-settings";
+import { CurrentYear } from "./current-year";
 
 export async function SiteFooter() {
   const settings = await getSiteSettings();
@@ -56,7 +57,7 @@ export async function SiteFooter() {
         </nav>
       </div>
       <div className="footer-bottom">
-        <p className="footer-note">{footerNote}</p>
+        <p className="footer-note">© <CurrentYear initialYear={new Date().getUTCFullYear()} /> {settings.footerName} · {footerNote}</p>
         <div><Link href="/studio">Owner Studio</Link></div>
       </div>
     </footer>

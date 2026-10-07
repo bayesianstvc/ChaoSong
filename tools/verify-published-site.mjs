@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const RELEASE_URL = 'https://chaosong.blog/release.json';
+export const SOURCE_URL = 'https://chaosong.heoa-group.chatgpt.site/api/public-export?renderer=v34';
 const maxResponseBytes = 64 * 1024;
 
 function validateIdentity(release) {
@@ -14,7 +15,7 @@ function validateIdentity(release) {
   return release;
 }
 
-async function readRelease(response) {
+async function readRelease(response, source = false) {
   if (!response.ok) throw new Error(`Release request returned HTTP ${response.status}`);
   if (!response.body) throw new Error('Release response has no body');
   const reader = response.body.getReader();
@@ -25,14 +26,16 @@ async function readRelease(response) {
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > maxResponseBytes) throw new Error('Release metadata exceeded 64 KiB');
+      if (bytes > (source ? 8 * 1024 * 1024 : maxResponseBytes)) throw new Error('Public metadata exceeded size limit');
       chunks.push(value);
     }
   } finally {
     await reader.cancel();
     reader.releaseLock();
   }
-  return validateIdentity(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+  const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if (source) { if (!/^[a-f0-9]{64}$/.test(value.generation ?? '')) throw new Error('Invalid source generation'); return value; }
+  return validateIdentity(value);
 }
 
 /** Read-only, bounded verification. It never retries or rolls back deployment. */
@@ -45,6 +48,7 @@ export async function verifyPublishedRelease(candidate, {
   timeoutMs = 10_000,
 } = {}) {
   validateIdentity(candidate);
+  if (candidate.sourceUrl != null && candidate.sourceUrl !== SOURCE_URL) throw new Error("Unrecognized public source URL");
   if (!Number.isInteger(attempts) || attempts < 1 || attempts > 8 ||
       !Number.isInteger(intervalMs) || intervalMs < 0 || intervalMs > 10_000 ||
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10_000) {
@@ -66,6 +70,11 @@ export async function verifyPublishedRelease(candidate, {
       const live = await readRelease(response);
       if (live.generation !== candidate.generation || live.rendererRevision !== candidate.rendererRevision) {
         throw new Error('Published generation or renderer revision does not yet match the candidate');
+      }
+      if (candidate.sourceUrl === SOURCE_URL) {
+        if (live.sourceUrl !== SOURCE_URL) throw new Error('Published source URL does not match the candidate');
+        const source = await readRelease(await fetchImpl(SOURCE_URL, {redirect:'error',credentials:'omit',cache:'no-store',headers:{accept:'application/json'},signal:AbortSignal.timeout(timeoutMs)}), true);
+        if (source.generation !== candidate.generation) throw new Error('The current Sites v34 source no longer matches the publication');
       }
       log(`PUBLISHED_RELEASE_VERIFIED ${candidate.generation} ${candidate.rendererRevision}`);
       return { generation: live.generation, rendererRevision: live.rendererRevision, attempts: attempt };

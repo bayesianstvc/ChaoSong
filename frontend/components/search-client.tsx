@@ -10,6 +10,17 @@ function normalize(value: string) {
 
 export function SearchClient({ records }: { records: SearchRecord[] }) {
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    const read = () => setQuery(new URLSearchParams(window.location.search).get("q") ?? "");
+    read(); window.addEventListener("popstate", read);
+    return () => window.removeEventListener("popstate", read);
+  }, []);
+  function updateQuery(value: string) {
+    setQuery(value);
+    const url = new URL(window.location.href);
+    if (value) url.searchParams.set("q", value); else url.searchParams.delete("q");
+    window.history.replaceState(window.history.state, "", url);
+  }
   const results = useMemo(() => {
     const terms = normalize(query).split(/\s+/).filter(Boolean);
     if (!terms.length) return records.slice(0, 12);
@@ -38,7 +49,7 @@ export function SearchClient({ records }: { records: SearchRecord[] }) {
         id="site-search"
         type="search"
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => updateQuery(event.target.value)}
         placeholder="Try BSTVC, maternal health, 医疗资源…"
         autoComplete="off"
       />

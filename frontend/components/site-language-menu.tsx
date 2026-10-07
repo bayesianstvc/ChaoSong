@@ -26,10 +26,6 @@ export function SiteLanguageMenu() {
 
   const visible = languages.filter(([code, label]) => `${code} ${label}`.toLowerCase().includes(query.toLowerCase()));
   function translate(code: string) {
-    if (code === "en") {
-      window.location.assign(window.location.pathname + window.location.search);
-      return;
-    }
     const target = encodeURIComponent(window.location.href);
     window.open(`https://translate.google.com/translate?sl=auto&tl=${encodeURIComponent(code)}&u=${target}`, "_blank", "noopener,noreferrer");
     setOpen(false);
@@ -44,7 +40,7 @@ export function SiteLanguageMenu() {
         <div><strong>Translate page</strong><button type="button" aria-label="Close" onClick={() => setOpen(false)}><X size={15} /></button></div>
         <label><MagnifyingGlass size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search language…" /></label>
         <div className="language-options">{visible.map(([code, label]) => <button type="button" key={code} onClick={() => translate(code)}><span>{label}</span><small>{code}</small></button>)}</div>
-        <p>Translation opens in a new page so the English original remains available.</p>
+        <p>Translation opens in a new page. This original page stays available in its own language.</p>
       </div> : null}
     </div>
   );

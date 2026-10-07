@@ -2,7 +2,7 @@ import publicData from './public-data.json';
 import migrated from './migrated-content.json';
 import { markdownToHtml } from '@/lib/markdown';
 import type { EditorialEntry, EditorialType, SearchRecord } from '@/lib/editorial';
-import { defaultSiteSettings, type SiteSettings } from '@/lib/site-settings';
+import { defaultSiteSettings, siteAssetUrl, type SiteSettings } from '@/lib/site-settings';
 
 export { defaultSiteSettings, type SiteSettings } from '@/lib/site-settings';
 export type CmsEntry = EditorialEntry & {
@@ -10,9 +10,10 @@ export type CmsEntry = EditorialEntry & {
   releaseId: string; originalHtml?: string;
 };
 export type PublicEntrySummary = Omit<CmsEntry, 'body' | 'html' | 'originalHtml'>;
+function renderPublicBody(entry: {body: string; renderedHtml?: string}) { return typeof entry.renderedHtml === 'string' ? entry.renderedHtml : markdownToHtml(entry.body); }
 const entries: CmsEntry[] = publicData.entries.map(entry => ({
   ...entry, type: entry.type as EditorialType, language: entry.language as 'en' | 'zh', status: 'published',
-  html: markdownToHtml(entry.body),
+  html: renderPublicBody(entry),
 }));
 const coreRoutes: Record<string, string> = { home: '/', about: '/about', bstvc: '/bstvc', research: '/research', publications: '/publications', resources: '/resources', news: '/news', journal: '/blogs' };
 function route(entry: Pick<CmsEntry, 'type' | 'slug'>) {
@@ -51,4 +52,33 @@ export async function buildDynamicSearchIndex(): Promise<SearchRecord[]> {
     ...migrated.pages.map(page => ({ title: page.title, summary: page.headings.slice(0, 4).join(' · '), body: plainText(page.contentHtml), href: `/archive/${encodeURIComponent(page.slug)}`, type: 'archive page', language: page.language as 'en' | 'zh', date: page.modified })),
     ...migrated.posts.map(post => ({ title: post.title, summary: post.headings.slice(0, 4).join(' · '), body: plainText(post.contentHtml), href: `/blogs/${encodeURIComponent(post.slug)}`, type: 'journal archive', language: post.language as 'en' | 'zh', date: post.date })),
   ];
+}
+
+function getRouteMetadataInfo(pagePath, publicData, migrated = {pages: []}) {
+  const trim = value => value.replace(/\/+$/, '') || '/';
+  const route = entry => {
+    const core = {home:'/',about:'/about',bstvc:'/bstvc',research:'/research',publications:'/publications',resources:'/resources',news:'/news',journal:'/blogs'};
+    const prefix = {news:'news',publication:'publications',journal:'blogs',research:'research',resource:'resources'};
+    return entry.type === 'page' ? (Object.hasOwn(core,entry.slug)?core[entry.slug]:'/'+encodeURIComponent(entry.slug)) : '/'+prefix[entry.type]+'/'+encodeURIComponent(entry.slug);
+  };
+  const page = trim(pagePath), name = publicData.settings?.siteName || 'Chao Song';
+  const entry = publicData.entries.find(value => trim(route(value)) === page);
+  if (entry) return {title:entry.seoTitle?.trim() || entry.title,description:entry.seoDescription?.trim() || entry.summary,path:route(entry),type:entry.type==='page'?'website':'article'};
+  if (page === '/search') return {title:`Search | ${name}`,description:`Search ${name}'s research, publications, news, resources and bilingual archive.`,path:'/search',type:'website',robots:{index:false,follow:true}};
+  if (page === '/archive') return {title:`Source Archive | ${name}`,description:'Preserved public source pages in their original order and language.',path:'/archive',type:'website'};
+  if (!page.startsWith('/archive/')) return null;
+  let slug;try{slug=decodeURIComponent(page.slice('/archive/'.length));}catch{return null;}
+  const archived = migrated.pages.find(value=>value.slug===slug);
+  if (!archived) return null;
+  const description = archived.headings?.filter(Boolean).slice(0,4).join(' · ') || `${archived.title} — preserved source page in its original language.`;
+  return {title:`${archived.title} | Source Archive`,description,path:'/archive/'+encodeURIComponent(archived.slug),type:'article'};
+}
+
+export async function getStaticEntryMetadata(type: EditorialType | 'search' | 'archive', slug: string) {
+  const selectedPath = type === 'search' ? '/search' : type === 'archive' ? '/archive'+(slug?'/'+encodeURIComponent(slug):'') : route({type,slug});
+  const info = getRouteMetadataInfo(selectedPath,publicData,migrated); if (!info) return null;
+  const settings = await getSiteSettings();
+  const {title,description} = info;
+  const image = siteAssetUrl(settings.defaultOgAssetId, settings.defaultOgUrl);
+  return {title:{absolute:title},description,...(info.robots?{robots:info.robots}:{}),alternates:{canonical:info.path},openGraph:{type:info.type,title,description,url:info.path,images:[image]},twitter:{card:'summary_large_image',title,description,images:[image]}};
 }
