@@ -6,24 +6,37 @@ export function publicEntryPath(entry) {
 }
 const escape = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 // Self-contained so the static CMS adapter can reuse this exact route resolver.
-export function getRouteMetadataInfo(pagePath, publicData, migrated = {pages: []}) {
+export function getRouteMetadataInfo(pagePath, publicData, migrated = {pages: [],posts: []}) {
   const trim = value => value.replace(/\/+$/, '') || '/';
   const route = entry => {
     const core = {home:'/',about:'/about',bstvc:'/bstvc',research:'/research',publications:'/publications',resources:'/resources',news:'/news',journal:'/blogs'};
     const prefix = {news:'news',publication:'publications',journal:'blogs',research:'research',resource:'resources'};
     return entry.type === 'page' ? (Object.hasOwn(core,entry.slug)?core[entry.slug]:'/'+encodeURIComponent(entry.slug)) : '/'+prefix[entry.type]+'/'+encodeURIComponent(entry.slug);
   };
-  const page = trim(pagePath), name = publicData.settings?.siteName || 'Chao Song';
+  const page = trim(pagePath.split('/').map(part=>{try{return encodeURIComponent(decodeURIComponent(part));}catch{return part;}}).join('/'));
+  const name = publicData.settings?.siteName || 'Chao Song';
   const entry = publicData.entries.find(value => trim(route(value)) === page);
-  if (entry) return {title:entry.seoTitle?.trim() || entry.title,description:entry.seoDescription?.trim() || entry.summary,path:route(entry),type:entry.type==='page'?'website':'article'};
-  if (page === '/search') return {title:`Search | ${name}`,description:`Search ${name}'s research, publications, news, resources and bilingual archive.`,path:'/search',type:'website',robots:{index:false,follow:true}};
-  if (page === '/archive') return {title:`Source Archive | ${name}`,description:'Preserved public source pages in their original order and language.',path:'/archive',type:'website'};
-  if (!page.startsWith('/archive/')) return null;
-  let slug;try{slug=decodeURIComponent(page.slice('/archive/'.length));}catch{return null;}
-  const archived = migrated.pages.find(value=>value.slug===slug);
+  if (entry) return {title:entry.seoTitle?.trim() || entry.title,description:entry.seoDescription?.trim() || entry.summary || entry.title,path:route(entry),type:entry.type==='page'?'website':'article'};
+  const coreFallback = {
+    '/':['Home',publicData.settings?.siteDescription || 'Research in health, geography and Bayesian spatiotemporal statistics.'],
+    '/about':['About','Academic experience, research interests, professional links, and collaborators.'],
+    '/bstvc':['BSTVC','Bayesian Spatiotemporally Varying Coefficients modeling.'],
+    '/research':['Research','Research in health and medical geography and Bayesian spatiotemporal statistics.'],
+    '/publications':['Publications','The peer-reviewed publication record of Chao Song.'],
+    '/resources':['Resources','Datasets, software, documentation, and reproducible resources.'],
+    '/news':['News','Latest research news and the public news archive.'],
+    '/blogs':['Blogs','Research notes, science communication, and bilingual blog posts.'],
+  };
+  if (Object.hasOwn(coreFallback,page)) {const [title,description]=coreFallback[page];return {title:title+' | '+name,description,path:page,type:'website'};}
+  if (page === '/search') return {title:'Search | '+name,description:'Search '+name+"'s research, publications, news, resources and bilingual archive.",path:'/search',type:'website',robots:{index:false,follow:true}};
+  if (page === '/archive') return {title:'Source Archive | '+name,description:'Preserved public source pages in their original order and language.',path:'/archive',type:'website'};
+  const legacyBlog = page.startsWith('/blogs/');
+  if (!legacyBlog && !page.startsWith('/archive/')) return null;
+  let slug;try{slug=decodeURIComponent(page.slice(legacyBlog?'/blogs/'.length:'/archive/'.length));}catch{return null;}
+  const archived = (legacyBlog ? migrated.posts ?? [] : migrated.pages ?? []).find(value=>value.slug===slug);
   if (!archived) return null;
-  const description = archived.headings?.filter(Boolean).slice(0,4).join(' · ') || `${archived.title} — preserved source page in its original language.`;
-  return {title:`${archived.title} | Source Archive`,description,path:'/archive/'+encodeURIComponent(archived.slug),type:'article'};
+  const description = archived.headings?.filter(Boolean).slice(0,4).join(' · ') || archived.title+' — preserved article in its original language.';
+  return {title:archived.title+(legacyBlog?' | '+name:' | Source Archive'),description,path:(legacyBlog?'/blogs/':'/archive/')+encodeURIComponent(archived.slug),type:'article'};
 }
 export function applyStaticMetadata(html, relativePath, publicData, basePath = '', migrated = {pages: []}) {
   const pagePath = '/' + relativePath.replace(/(?:^|\/)index\.html$/, '');

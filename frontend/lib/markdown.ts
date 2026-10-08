@@ -328,12 +328,20 @@ function plainText(value: string) {
   return decodeEntities(value.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/[ \t]+/g, " ").trim());
 }
 
-function inlineHtmlToMarkdown(value: string): string {
-  const code: string[] = [];
-  const source = value.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_match, text) => {
-    code.push(`\`${decodeEntities(text.replace(/<[^>]+>/g, ""))}\``);
+function inlineHtmlToMarkdown(value: string, sharedLiterals?: string[]): string {
+  // Recursive link/style labels share one literal registry. Resolving a child
+  // with a fresh registry could delete its parent's math/code placeholders.
+  const code = sharedLiterals ?? [];
+  const literalInline = (markdown: string) => {
+    code.push(markdown);
     return `\uE000STUDIOHTMLCODE${code.length - 1}\uE001`;
-  });
+  };
+  const source = value.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_match, text) => {
+    return literalInline(`\`${decodeEntities(text.replace(/<[^>]+>/g, ""))}\``);
+  })
+    // Shield the entire KaTeX subtree before inspecting surrounding style spans.
+    .replace(/<studio-math-inline\b([^>]*)>([\s\S]*?)<\/studio-math-inline>/gi, (_match, attrs, text) => literalInline(`$${attribute(attrs, "aria-label") || plainText(text)}$`))
+    .replace(/<span\b([^>]*)class=["'][^"']*math-inline[^"']*["']([^>]*)>([\s\S]*?)<\/span>/gi, (_match, before, after, text) => literalInline(`$${attribute(`${before} ${after}`, "aria-label") || plainText(text)}$`));
   const result = source
     .replace(/<span\b([^>]*)data-text-style=["']true["']([^>]*)>([\s\S]*?)<\/span>/gi, (_match, before, after, text) => {
       const attrs = `${before} ${after}`;
@@ -341,20 +349,12 @@ function inlineHtmlToMarkdown(value: string): string {
       const size = /^(?:small|normal|large|xlarge)$/.test(sizeValue) ? sizeValue : "normal";
       const colorValue = attribute(attrs, "data-text-color");
       const color = /^#[0-9a-f]{6}$/i.test(colorValue) ? colorValue : "#173b51";
-      return `{{style size=${size} color=${color}}}${inlineHtmlToMarkdown(text)}{{/style}}`;
+      return `{{style size=${size} color=${color}}}${inlineHtmlToMarkdown(text, code)}{{/style}}`;
     })
     .replace(/<sup\b[^>]*class=["'][^"']*footnote-ref[^"']*["'][^>]*>[\s\S]*?<a\b[^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/sup>/gi, (_match, id) => `[^${plainText(id)}]`)
     .replace(/<cite\b([^>]*)>[\s\S]*?<\/cite>/gi, (_match, attrs) => {
       const key = attribute(attrs, "data-cite");
       return key ? `[@${key}]` : "";
-    })
-    .replace(/<studio-math-inline\b([^>]*)>([\s\S]*?)<\/studio-math-inline>/gi, (_match, attrs, text) => {
-      const expression = attribute(attrs, "aria-label") || plainText(text);
-      return `$${expression}$`;
-    })
-    .replace(/<span\b([^>]*)class=["'][^"']*math-inline[^"']*["']([^>]*)>([\s\S]*?)<\/span>/gi, (_match, before, after, text) => {
-      const expression = attribute(`${before} ${after}`, "aria-label") || plainText(text);
-      return `$${expression}$`;
     })
     .replace(/<(?:strong|b)\b[^>]*>([\s\S]*?)<\/(?:strong|b)>/gi, "**$1**")
     .replace(/<(?:em|i)\b[^>]*>([\s\S]*?)<\/(?:em|i)>/gi, "*$1*")
@@ -362,14 +362,21 @@ function inlineHtmlToMarkdown(value: string): string {
     .replace(/<(?:del|s|strike)\b[^>]*>([\s\S]*?)<\/(?:del|s|strike)>/gi, "~~$1~~")
     .replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (_match, attrs, text) => {
       const href = attribute(attrs, "href");
-      if (!href) return inlineHtmlToMarkdown(text);
+      if (!href) return inlineHtmlToMarkdown(text, code);
       const target = attribute(attrs, "target") === "_blank" ? "{target=_blank}" : "";
-      return `[${inlineHtmlToMarkdown(text)}](${href})${target}`;
+      return `[${inlineHtmlToMarkdown(text, code)}](${href})${target}`;
     })
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/[ \t]+/g, " ");
-  return decodeEntities(result).replace(/\uE000STUDIOHTMLCODE(\d+)\uE001/g, (_match, index) => code[Number(index)] ?? "");
+  // HTML text entities describe visible text, not a second HTML input. Keep
+  // literal angle brackets and visible entity spellings escaped in Markdown,
+  // whose renderer decodes one layer before safely escaping text again.
+  const textMarkdown = decodeEntities(result)
+    .replace(/&(?=(?:#\d+|#x[\da-f]+|[a-z][a-z\d]*);)/gi, "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  return sharedLiterals ? textMarkdown : textMarkdown.replace(/\uE000STUDIOHTMLCODE(\d+)\uE001/g, (_match, index) => code[Number(index)] ?? "");
 }
 
 function imageMarkdown(attrs: string, fallbackSize?: string, fallbackAlign?: string, caption?: string) {
@@ -566,7 +573,7 @@ export function htmlToMarkdown(value: string) {
     .replace(/<hr\b[^>]*\/?\s*>/gi, () => stash("---"))
     .replace(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (_match, level, inner) => stash(`${"#".repeat(Number(level))} ${inlineHtmlToMarkdown(inner).trim()}`))
     .replace(/<img\b([^>]*)>/gi, (_match, attrs) => stash(imageMarkdown(attrs)))
-    .replace(/<(?:p|div|section|article)\b[^>]*>([\s\S]*?)<\/(?:p|div|section|article)>/gi, (_match, inner) => `\n\n${inlineHtmlToMarkdown(inner)}\n\n`)
+    .replace(/<(?:p|div|section|article)\b[^>]*>([\s\S]*?)<\/(?:p|div|section|article)>/gi, (_match, inner) => stash(inlineHtmlToMarkdown(inner)))
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(?:p|div|section|article)>/gi, "\n\n")
     .replace(/<(?:p|div|section|article)\b[^>]*>/gi, "\n\n");

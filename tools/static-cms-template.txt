@@ -1,6 +1,7 @@
 import publicData from './public-data.json';
 import migrated from './migrated-content.json';
 import { markdownToHtml } from '@/lib/markdown';
+import { decodeHtmlEntities } from '@/lib/html-entities';
 import type { EditorialEntry, EditorialType, SearchRecord } from '@/lib/editorial';
 import { defaultSiteSettings, siteAssetUrl, type SiteSettings } from '@/lib/site-settings';
 
@@ -45,33 +46,62 @@ export async function getHomepageUpdates(limit = 6): Promise<HomepageUpdate[]> {
   updates.push(...migrated.posts.map(post => ({ type: 'journal' as const, slug: post.slug, title: post.title, date: post.date, updated: post.modified ?? post.date, section: 'Blogs', href: `/blogs/${encodeURIComponent(post.slug)}` })));
   return updates.sort((a, b) => (b.date ?? b.updated ?? '').localeCompare(a.date ?? a.updated ?? '') || a.title.localeCompare(b.title)).slice(0, Math.min(12, Math.max(1, limit)));
 }
-function plainText(html: string) { return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
+
+/** Decode one display layer, preserving authored Markdown code literals. */
+function publicSummaryText(value: string): string {
+  return value.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`+[^`]*`+)/g)
+    .map((part, index) => index % 2 ? part : decodeHtmlEntities(part))
+    .join("");
+}
+
+/** Strip markup before decoding: encoded tag examples remain literal text. */
+function publicHtmlText(value: string): string {
+  return decodeHtmlEntities(value
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ").trim();
+}
+
 export async function buildDynamicSearchIndex(): Promise<SearchRecord[]> {
   return [
-    ...entries.map(entry => ({ title: entry.title, summary: entry.summary, body: entry.body, href: route(entry), type: entry.type, language: entry.language, date: entry.date })),
-    ...migrated.pages.map(page => ({ title: page.title, summary: page.headings.slice(0, 4).join(' · '), body: plainText(page.contentHtml), href: `/archive/${encodeURIComponent(page.slug)}`, type: 'archive page', language: page.language as 'en' | 'zh', date: page.modified })),
-    ...migrated.posts.map(post => ({ title: post.title, summary: post.headings.slice(0, 4).join(' · '), body: plainText(post.contentHtml), href: `/blogs/${encodeURIComponent(post.slug)}`, type: 'journal archive', language: post.language as 'en' | 'zh', date: post.date })),
+    ...entries.map(entry => ({ title: entry.title, summary: publicSummaryText(entry.summary), body: publicHtmlText(entry.html), href: route(entry), type: entry.type, language: entry.language, date: entry.date })),
+    ...migrated.pages.map(page => ({ title: page.title, summary: publicSummaryText(page.headings.slice(0, 4).join(' · ')), body: publicHtmlText(page.contentHtml), href: `/archive/${encodeURIComponent(page.slug)}`, type: 'archive page', language: page.language as 'en' | 'zh', date: page.modified })),
+    ...migrated.posts.map(post => ({ title: post.title, summary: publicSummaryText(post.headings.slice(0, 4).join(' · ')), body: publicHtmlText(post.contentHtml), href: `/blogs/${encodeURIComponent(post.slug)}`, type: 'journal archive', language: post.language as 'en' | 'zh', date: post.date })),
   ];
 }
 
-function getRouteMetadataInfo(pagePath, publicData, migrated = {pages: []}) {
+function getRouteMetadataInfo(pagePath, publicData, migrated = {pages: [],posts: []}) {
   const trim = value => value.replace(/\/+$/, '') || '/';
   const route = entry => {
     const core = {home:'/',about:'/about',bstvc:'/bstvc',research:'/research',publications:'/publications',resources:'/resources',news:'/news',journal:'/blogs'};
     const prefix = {news:'news',publication:'publications',journal:'blogs',research:'research',resource:'resources'};
     return entry.type === 'page' ? (Object.hasOwn(core,entry.slug)?core[entry.slug]:'/'+encodeURIComponent(entry.slug)) : '/'+prefix[entry.type]+'/'+encodeURIComponent(entry.slug);
   };
-  const page = trim(pagePath), name = publicData.settings?.siteName || 'Chao Song';
+  const page = trim(pagePath.split('/').map(part=>{try{return encodeURIComponent(decodeURIComponent(part));}catch{return part;}}).join('/'));
+  const name = publicData.settings?.siteName || 'Chao Song';
   const entry = publicData.entries.find(value => trim(route(value)) === page);
-  if (entry) return {title:entry.seoTitle?.trim() || entry.title,description:entry.seoDescription?.trim() || entry.summary,path:route(entry),type:entry.type==='page'?'website':'article'};
-  if (page === '/search') return {title:`Search | ${name}`,description:`Search ${name}'s research, publications, news, resources and bilingual archive.`,path:'/search',type:'website',robots:{index:false,follow:true}};
-  if (page === '/archive') return {title:`Source Archive | ${name}`,description:'Preserved public source pages in their original order and language.',path:'/archive',type:'website'};
-  if (!page.startsWith('/archive/')) return null;
-  let slug;try{slug=decodeURIComponent(page.slice('/archive/'.length));}catch{return null;}
-  const archived = migrated.pages.find(value=>value.slug===slug);
+  if (entry) return {title:entry.seoTitle?.trim() || entry.title,description:entry.seoDescription?.trim() || entry.summary || entry.title,path:route(entry),type:entry.type==='page'?'website':'article'};
+  const coreFallback = {
+    '/':['Home',publicData.settings?.siteDescription || 'Research in health, geography and Bayesian spatiotemporal statistics.'],
+    '/about':['About','Academic experience, research interests, professional links, and collaborators.'],
+    '/bstvc':['BSTVC','Bayesian Spatiotemporally Varying Coefficients modeling.'],
+    '/research':['Research','Research in health and medical geography and Bayesian spatiotemporal statistics.'],
+    '/publications':['Publications','The peer-reviewed publication record of Chao Song.'],
+    '/resources':['Resources','Datasets, software, documentation, and reproducible resources.'],
+    '/news':['News','Latest research news and the public news archive.'],
+    '/blogs':['Blogs','Research notes, science communication, and bilingual blog posts.'],
+  };
+  if (Object.hasOwn(coreFallback,page)) {const [title,description]=coreFallback[page];return {title:title+' | '+name,description,path:page,type:'website'};}
+  if (page === '/search') return {title:'Search | '+name,description:'Search '+name+"'s research, publications, news, resources and bilingual archive.",path:'/search',type:'website',robots:{index:false,follow:true}};
+  if (page === '/archive') return {title:'Source Archive | '+name,description:'Preserved public source pages in their original order and language.',path:'/archive',type:'website'};
+  const legacyBlog = page.startsWith('/blogs/');
+  if (!legacyBlog && !page.startsWith('/archive/')) return null;
+  let slug;try{slug=decodeURIComponent(page.slice(legacyBlog?'/blogs/'.length:'/archive/'.length));}catch{return null;}
+  const archived = (legacyBlog ? migrated.posts ?? [] : migrated.pages ?? []).find(value=>value.slug===slug);
   if (!archived) return null;
-  const description = archived.headings?.filter(Boolean).slice(0,4).join(' · ') || `${archived.title} — preserved source page in its original language.`;
-  return {title:`${archived.title} | Source Archive`,description,path:'/archive/'+encodeURIComponent(archived.slug),type:'article'};
+  const description = archived.headings?.filter(Boolean).slice(0,4).join(' · ') || archived.title+' — preserved article in its original language.';
+  return {title:archived.title+(legacyBlog?' | '+name:' | Source Archive'),description,path:(legacyBlog?'/blogs/':'/archive/')+encodeURIComponent(archived.slug),type:'article'};
 }
 
 export async function getStaticEntryMetadata(type: EditorialType | 'search' | 'archive', slug: string) {

@@ -15,6 +15,8 @@ export function SiteLanguageMenu() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  function closeMenu() { setOpen(false); triggerRef.current?.focus({ preventScroll: true }); }
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -33,11 +35,11 @@ export function SiteLanguageMenu() {
 
   return (
     <div className="site-language-menu" ref={rootRef}>
-      <button className="header-icon-button" type="button" title="Translate this page" aria-label="Translate this page" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+      <button ref={triggerRef} className="header-icon-button" type="button" title="Translate this page" aria-label="Translate this page" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         <GlobeHemisphereWest size={18} />
       </button>
-      {open ? <div className="site-language-popover" role="dialog" aria-label="Choose translation language">
-        <div><strong>Translate page</strong><button type="button" aria-label="Close" onClick={() => setOpen(false)}><X size={15} /></button></div>
+      {open ? <div className="site-language-popover" role="dialog" aria-label="Choose translation language" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeMenu(); } }}>
+        <div><strong>Translate page</strong><button type="button" aria-label="Close" onClick={closeMenu}><X size={15} /></button></div>
         <label><MagnifyingGlass size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search language…" /></label>
         <div className="language-options">{visible.map(([code, label]) => <button type="button" key={code} onClick={() => translate(code)}><span>{label}</span><small>{code}</small></button>)}</div>
         <p>Translation opens in a new page. This original page stays available in its own language.</p>

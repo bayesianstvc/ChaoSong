@@ -79,7 +79,7 @@ layout=layout.replace('import { headers } from "next/headers";','').replace(/asy
 await write(path.join(appPublic,'layout.tsx'),layout);
 await cp(path.join(repoRoot,'collection-templates'),appPublic,{recursive:true});
 await write(path.join(stage,'components/static-redirect.tsx'),`"use client";\nimport {useEffect} from 'react';\nexport function StaticRedirect({href}:{href:string}) { const target=${JSON.stringify(basePath)}+href; useEffect(()=>{window.location.replace(target+window.location.search+window.location.hash);},[target]); return <><meta httpEquiv="refresh" content={'0;url='+target}/><p><a href={target}>Continue to the current page</a></p></>; }\n`);
-for(const [route,target] of [['journal','/blogs'],['updates','/news']]) await write(path.join(appPublic,route,'page.tsx'),`import {StaticRedirect} from '@/components/static-redirect'; export default function Alias(){return <StaticRedirect href=${JSON.stringify(target)}/>;}\n`);
+for(const [route,target] of [['journal','/blogs'],['updates','/news'],['bayesian-stvc','/bstvc']]) await write(path.join(appPublic,route,'page.tsx'),`import {StaticRedirect} from '@/components/static-redirect'; export default function Alias(){return <StaticRedirect href=${JSON.stringify(target)}/>;}\n`);
 const legacyData=await json(publicData.files.migratedContent);
 const legacyNews=legacyData.pages.find(x=>x.slug==='main-page')?.contentHtml??'';
 const {extractNewsYears,extractNewsYearHtml}=await import(pathToFileURL(path.join(repoRoot,'lib/news-archive.ts')));
