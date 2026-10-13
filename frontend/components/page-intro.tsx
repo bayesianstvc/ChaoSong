@@ -12,6 +12,8 @@ export function PageIntro({
   action?: React.ReactNode;
 }) {
   return (
+    <>
+    <link rel="preload" as="image" href="/design/paper-texture.webp" fetchPriority="high" />
     <header className="page-intro">
       <p className="section-index" aria-hidden="true">
         {index}
@@ -23,5 +25,6 @@ export function PageIntro({
       </div>
       {media ? <div className="page-intro-media">{media}</div> : null}
     </header>
+    </>
   );
 }

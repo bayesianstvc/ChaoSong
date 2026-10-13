@@ -62,6 +62,11 @@ for(const asset of catalog.assets) {
   for(const url of asset.publicPaths) { if(typeof url !== 'string' || !url.startsWith('/') || url.startsWith('//')) throw new Error('Invalid public asset alias'); urlMap[url]=basePath+rel; }
 }
 await write(path.join(stage,'media-catalog.json'),JSON.stringify(catalog,null,2));
+// V37 reviewed brand poster: retain animation catalog aliases and localize both component URLs.
+const brandPoster='/design/bstvc-logo-poster.webp';
+await mkdir(path.join(stage,'public/design'),{recursive:true});
+await cp(path.join(repoRoot,'public',brandPoster),path.join(stage,'public',brandPoster));
+urlMap[brandPoster]=basePath+brandPoster;
 const ordered=Object.keys(urlMap).sort((a,b)=>b.length-a.length);
 const escapeRegex=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const urlsRx=new RegExp(ordered.map(escapeRegex).join('|'),'g');

@@ -3089,3 +3089,18 @@ html[data-theme="night"] .language-options button { color: #edf4fb; }
  .site-header {gap:.55rem;padding-inline:1rem;flex-wrap:wrap;}
  .site-language-popover {position:fixed;top:82px;right:12px;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 100px);overflow-y:auto;}
 }
+
+
+/* V37 BSTVC on-demand brand media */
+.page-intro:has(.bstvc-brand-media) .page-intro-media { display: block; background: #02050d; }
+.bstvc-brand-media { position: relative; display: grid; place-items: center; width: 100%; height: 100%; }
+.bstvc-brand-stage { position: relative; width: min(100%, clamp(220px, 24vw, 340px)); aspect-ratio: 1; max-width: 100%; margin: auto; }
+.bstvc-brand-poster { display: block; width: 100%; height: 100%; object-fit: contain; }
+.bstvc-brand-poster[hidden] { display: none; }
+.bstvc-brand-stage .bstvc-motion-logo { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; }
+.bstvc-brand-toggle { position: absolute; bottom: .65rem; left: 50%; transform: translateX(-50%); min-height: 36px; max-width: calc(100% - 1.25rem); padding: .5rem .8rem; border: 1px solid #6a8bb0; border-radius: 999px; background: #10283ce8; color: #fff; font: 600 .74rem/1.3 var(--sans); cursor: pointer; white-space: nowrap; }
+.bstvc-brand-toggle:hover { background: #204969; }
+.bstvc-brand-toggle:focus-visible { outline: 3px solid #82d4f4; outline-offset: 3px; }
+.bstvc-brand-status { position: absolute; bottom: 3.35rem; left: .6rem; right: .6rem; padding: .35rem .5rem; border-radius: 6px; background: #10283ce8; color: #fff; text-align: center; font: .7rem/1.35 var(--sans); }
+.bstvc-brand-status:empty { display: none; }
+/* End V37 BSTVC on-demand brand media */

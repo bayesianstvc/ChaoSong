@@ -1,16 +1,10 @@
+import { publicPageMetadata } from "@/lib/page-metadata";
 import type { Metadata } from "next";
 import { MigratedPage } from "@/components/migrated-page";
-import { getPublishedEntryOrFallback } from "@/lib/cms";
+import { BstvcBrandMedia } from "@/components/bstvc-brand-media";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const entry = await getPublishedEntryOrFallback("page", "bstvc");
-  return {
-    title: "Chao Song | Home",
-    description: entry && "seoDescription" in entry
-      ? entry.seoDescription ?? entry.summary
-      : entry?.summary ?? "Bayesian Spatiotemporally Varying Coefficients modeling.",
-    alternates: { canonical: "/bstvc" },
-  };
+  return publicPageMetadata({ type: "page", slug: "bstvc", path: "/bstvc", title: "BSTVC", description: "Bayesian Spatiotemporally Varying Coefficients modeling." });
 }
 
 export default function BstvcPage() {
@@ -22,7 +16,7 @@ export default function BstvcPage() {
       lede="A unified full-map approach to detecting spatiotemporal heterogeneity of variable relationships."
       managedSlug="bstvc"
       introAction={<a className="page-intro-primary-link" href="https://bayesianstvc.github.io/" target="_blank" rel="noreferrer">Visit the official BSTVC website ↗</a>}
-      introMedia={<iframe className="bstvc-motion-logo" src="/bstvc-logo-motion.html?motion=force&v=52" title="Animated BSTVC logo" loading="eager" tabIndex={-1} />}
+      introMedia={<BstvcBrandMedia />}
     />
   );
 }
