@@ -743,7 +743,9 @@ main {
 
 .managed-content {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  /* OriginalContentToc owns the rail/body columns. Its wrapper must span
+     the full reading panel, not occupy a second, outer 190px rail. */
+  grid-template-columns: minmax(0, 1fr);
   gap: clamp(2rem, 5vw, 5.5rem);
 }
 
