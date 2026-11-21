@@ -19,7 +19,7 @@ export async function ManagedEntryPage({ type, slug }: { type: CmsEntry["type"];
   const introMedia = type === "resource"
     ? <img src="/design/card-resources.webp" alt="Research data, software, documentation, and teaching resources" loading="eager" decoding="async" />
     : undefined;
-  return <div className="inner-page"><PageIntro index={formatDate(entry.date)} title={entry.title} lede={entry.summary} media={introMedia} /><SocialShare title={entry.title} /><ManagedArticle entry={entry} /><ArticlePagination previous={previous} next={next} /></div>;
+  return <div className="inner-page"><PageIntro index={formatDate(entry.date)} title={entry.title} titleLanguage={entry.language} lede={entry.summary} media={introMedia} /><SocialShare title={entry.title} /><ManagedArticle entry={entry} /><ArticlePagination previous={previous} next={next} /></div>;
 }
 
 function toArticleNavigationItem(entry: Pick<CmsEntry, "slug" | "title" | "date">, type: CmsEntry["type"]): ArticleNavigationItem {

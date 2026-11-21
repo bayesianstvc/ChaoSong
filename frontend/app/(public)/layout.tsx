@@ -37,9 +37,9 @@ export default async function PublicLayout({ children }: Readonly<{ children: Re
     },
   };
   return <>
-    
+    <a className="skip-link" href="#main-content">Skip to main content</a>
     <ContentGalleryController />
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
-    <div className="site-frame"><SiteHeader /><main>{children}</main><SiteFooter /></div>
+    <div className="site-frame"><SiteHeader /><main id="main-content" tabIndex={-1}>{children}</main><SiteFooter /></div>
   </>;
 }

@@ -2,6 +2,7 @@ import publicData from './public-data.json';
 import migrated from './migrated-content.json';
 import { markdownToHtml } from '@/lib/markdown';
 import { decodeHtmlEntities } from '@/lib/html-entities';
+import { isPublishedFollowPage, refinePublishedArticleHtml } from '@/lib/public-article-presentation';
 import type { EditorialEntry, EditorialType, SearchRecord } from '@/lib/editorial';
 import { defaultSiteSettings, siteAssetUrl, type SiteSettings } from '@/lib/site-settings';
 
@@ -11,7 +12,12 @@ export type CmsEntry = EditorialEntry & {
   releaseId: string; originalHtml?: string;
 };
 export type PublicEntrySummary = Omit<CmsEntry, 'body' | 'html' | 'originalHtml'>;
-function renderPublicBody(entry: {body: string; renderedHtml?: string}) { return typeof entry.renderedHtml === 'string' ? entry.renderedHtml : markdownToHtml(entry.body); }
+const PUBLIC_BASE_PATH = '';
+const articlePresentation = { hasPublishedFollow: publicData.entries.some(isPublishedFollowPage), researchGateUrl: publicData.settings.researchGateUrl, basePath: PUBLIC_BASE_PATH };
+function renderPublicBody(entry: {body: string; renderedHtml?: string; type: string; slug: string; language: string}) {
+  const html = typeof entry.renderedHtml === 'string' ? entry.renderedHtml : markdownToHtml(entry.body);
+  return refinePublishedArticleHtml(html, entry, articlePresentation);
+}
 const entries: CmsEntry[] = publicData.entries.map(entry => ({
   ...entry, type: entry.type as EditorialType, language: entry.language as 'en' | 'zh', status: 'published',
   html: renderPublicBody(entry),

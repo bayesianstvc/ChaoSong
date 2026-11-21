@@ -143,6 +143,7 @@ for(const p of [...await walk(path.join(stage,'app')),...await walk(path.join(st
   if(/\.(tsx?|css|json)$/.test(p)) {let source=await readFile(p,'utf8');if(!p.endsWith('site-settings.ts'))source=rewriteAssets(source);else {const index=source.indexOf('\n');source=source.slice(0,index)+rewriteAssets(source.slice(index));}if(p.includes(path.join('app','(public)')))source=source.replace(/canonical:\s*(["'`])\//g,(_,quote)=>'canonical: '+quote+basePath+'/');await write(p,source);}
 }
 let adapter=await readFile(publicData.files.cmsAdapter,'utf8');
+adapter=adapter.replace("const PUBLIC_BASE_PATH = '';", `const PUBLIC_BASE_PATH = ${JSON.stringify(basePath)};`);
 adapter='const STATIC_URL_MAP: Record<string,string> = '+JSON.stringify(urlMap)+';\nfunction localizeHtml(html:string){return html.replace(/\\/cms-media\\/[^\\s"\'<>?]+/g, url => STATIC_URL_MAP[url] ?? url);}\n'+adapter.replace('html: renderPublicBody(entry)','html: localizeHtml(renderPublicBody(entry))');
 await write(publicData.files.cmsAdapter,adapter);
 // Imported public HTML may itself reference local media.

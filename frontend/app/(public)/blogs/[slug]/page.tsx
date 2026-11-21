@@ -40,7 +40,7 @@ export default async function BlogArticle({ params }: { params: Promise<{ slug: 
   const previous = currentIndex > 0 ? blogEntries[currentIndex - 1] : null;
   const next = currentIndex >= 0 && currentIndex < blogEntries.length - 1 ? blogEntries[currentIndex + 1] : null;
   const related = blogEntries.filter((entry) => entry.slug !== decoded).slice(0, 3).map((entry) => ({ ...entry, summary: entry.summary || "Read this article" }));
-  if (managed) return <div className="inner-page"><PageIntro index={formatDate(managed.date)} title={managed.title} lede={managed.summary} /><SocialShare title={managed.title} /><ManagedArticle entry={managed} /><ArticlePagination previous={previous} next={next} /><RelatedBlogs entries={related} /></div>;
+  if (managed) return <div className="inner-page"><PageIntro index={formatDate(managed.date)} title={managed.title} titleLanguage={managed.language} lede={managed.summary} /><SocialShare title={managed.title} /><ManagedArticle entry={managed} /><ArticlePagination previous={previous} next={next} /><RelatedBlogs entries={related} /></div>;
   let studioEntry: Awaited<ReturnType<typeof getStudioEntry>> = null;
   try { studioEntry = await getStudioEntry(`journal:${decoded}`); }
   catch { /* A missing local D1 keeps the bundled public fallback available. */ }

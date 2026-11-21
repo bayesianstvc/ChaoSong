@@ -61,6 +61,8 @@ export default async function Home() {
   const principles = homepagePrinciples(settings);
   const profileImage = siteAssetUrl(settings.profileImageAssetId, settings.profileImageUrl);
   const heroImage = siteAssetUrl(settings.homeHeroAssetId, settings.homeHeroUrl);
+  const updatesPath = settings.homeUpdatesHref.replace(/\/+$/, "");
+  const defaultNewsLink = updatesPath === "/news" && settings.homeUpdatesLabel === "View all news";
   return (
     <div className="paper-home" style={{ "--home-brand-primary": settings.brandPrimary, "--home-brand-secondary": settings.brandSecondary } as CSSProperties}>
       <HomeBackground settings={settings} />
@@ -108,10 +110,18 @@ export default async function Home() {
       </section>
 
       {updates.length ? <section className="home-updates" aria-labelledby="home-updates-title">
-        <div className="home-updates-heading"><h2 id="home-updates-title">{settings.homeUpdatesTitle}</h2><Link href={settings.homeUpdatesHref}>{settings.homeUpdatesLabel} <ArrowRight size={14} weight="bold" /></Link></div>
+        <div className="home-updates-heading">
+          <h2 id="home-updates-title">{settings.homeUpdatesTitle === "Latest News" && updates.some((entry) => entry.section !== "News") ? "Latest Updates" : settings.homeUpdatesTitle}</h2>
+          <nav className="home-updates-links" aria-label="Update collections">
+            <Link href={settings.homeUpdatesHref}>{defaultNewsLink ? "News" : settings.homeUpdatesLabel} <ArrowRight size={14} weight="bold" aria-hidden="true" /></Link>
+            {updatesPath === "/blogs"
+              ? <Link href="/news">News <ArrowRight size={14} weight="bold" aria-hidden="true" /></Link>
+              : <Link href="/blogs">Blogs <ArrowRight size={14} weight="bold" aria-hidden="true" /></Link>}
+          </nav>
+        </div>
         <div className="home-updates-rail">
           {updates.map((entry) => <Link href={entry.href} key={`${entry.section}:${entry.slug}`}>
-            <time>{formatDate(entry.date ?? entry.updated)}</time>
+            <time dateTime={entry.date ?? entry.updated ?? undefined}>{formatDate(entry.date ?? entry.updated)}</time>
             <span>{entry.section}</span>
             <strong>{entry.title}</strong>
           </Link>)}

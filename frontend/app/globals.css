@@ -57,6 +57,33 @@ summary:focus-visible {
   color: var(--ink);
 }
 
+.skip-link {
+  position: fixed;
+  z-index: 200;
+  top: max(.75rem, env(safe-area-inset-top));
+  left: max(.75rem, env(safe-area-inset-left));
+  max-width: calc(100vw - 1.5rem);
+  padding: .7rem 1rem;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  background: #173651;
+  color: #fff;
+  font: 600 1rem/1.4 var(--sans);
+  box-shadow: 0 3px 12px #0004;
+  transform: translateY(calc(-100% - 2rem));
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+  outline: 3px solid #27799c;
+  outline-offset: 3px;
+}
+
+#main-content:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: -3px;
+}
+
 .site-frame {
   width: min(100%, var(--content-width));
   min-height: 100vh;
@@ -2789,13 +2816,16 @@ body {
   background: rgba(255, 255, 255, 0.56);
 }
 
-.home-updates-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.8rem; }
+.home-updates-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 1rem; margin-bottom: 0.8rem; }
 .home-updates-heading h2 { margin: 0; color: #173651; font: 600 1rem/1.2 var(--serif); }
-.home-updates-heading > a { display: inline-flex; gap: 0.35rem; align-items: center; color: #27799c; font: 700 0.66rem/1 var(--sans); }
+.home-updates-links { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.95rem; }
+.home-updates-links a { display: inline-flex; min-height: 32px; gap: 0.3rem; align-items: center; color: #196686; font: 700 0.75rem/1.2 var(--sans); }
+.home-updates-links a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 3px; }
+html[data-theme="night"] .home-updates-links a { color: #aad9ee; }
 .home-updates-rail { display: grid; grid-auto-columns: minmax(210px, 1fr); grid-auto-flow: column; gap: 0; overflow-x: auto; scroll-snap-type: x proximity; }
 .home-updates-rail > a { position: relative; display: grid; min-height: 96px; align-content: start; gap: 0.45rem; padding: 0.6rem 1.15rem 0.45rem; border-left: 1px solid #d9d4cc; scroll-snap-align: start; }
 .home-updates-rail > a::before { position: absolute; top: 0.8rem; left: -4px; width: 7px; height: 7px; border-radius: 50%; background: linear-gradient(135deg, #ef6c62, #9a4fc0, #24a8bd); content: ""; }
-.home-updates-rail time { color: #7a8791; font: 0.62rem/1 var(--sans); }
+.home-updates-rail time { color: #566574; font: 0.75rem/1.35 var(--sans); }
 .home-updates-rail span { color: #a34c80; font: 700 0.58rem/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; }
 .home-updates-rail strong { color: #254159; font: 600 0.77rem/1.35 var(--sans); }
 
@@ -2930,6 +2960,7 @@ body {
 .site-language-popover > div:first-child button { border: 0; background: transparent; color: #667785; }
 .site-language-popover label { margin: .7rem 0; padding: .5rem .6rem; border: 1px solid #ddd8d0; border-radius: 8px; }
 .site-language-popover input { width: 100%; border: 0; outline: 0; background: transparent; }
+.site-language-popover label:focus-within, .site-language-menu button:focus-visible { outline: 2px solid #27799c; outline-offset: 3px; }
 .language-options { display: grid; grid-template-columns: 1fr 1fr; max-height: 290px; overflow: auto; }
 .language-options button { display: flex; align-items: center; justify-content: space-between; padding: .55rem; border: 0; border-radius: 7px; background: transparent; color: #27475f; text-align: left; }
 .language-options button:hover { background: #f2f4f7; }
@@ -3082,6 +3113,14 @@ html[data-theme="night"] .mobile-nav nav a,
 html[data-theme="night"] .site-language-popover p,
 html[data-theme="night"] .site-language-popover strong,
 html[data-theme="night"] .language-options button { color: #edf4fb; }
+html[data-theme="night"] .site-language-popover input { color: #edf4fb; }
+html[data-theme="night"] .site-language-popover input::placeholder,
+html[data-theme="night"] .language-options small,
+html[data-theme="night"] .site-language-popover > div:first-child button { color: #c9d5df; }
+html[data-theme="night"] .language-options button:hover { background: #344b60; }
+html[data-theme="night"] .site-language-popover label:focus-within,
+html[data-theme="night"] .site-language-menu button:focus-visible,
+html[data-theme="night"] #main-content:focus-visible { outline-color: #82d4f4; }
 
 
 /* V34 narrow reading tools: after base rules to preserve precedence. */

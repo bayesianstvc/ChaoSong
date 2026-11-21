@@ -8,6 +8,10 @@ function normalize(value: string) {
   return value.toLocaleLowerCase().normalize("NFKC");
 }
 
+function isArchived(record: SearchRecord) {
+  return record.type === "archive page" || record.type === "journal archive";
+}
+
 export function SearchClient({ records }: { records: SearchRecord[] }) {
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -28,14 +32,13 @@ export function SearchClient({ records }: { records: SearchRecord[] }) {
       .map((record) => {
         const title = normalize(record.title);
         const text = normalize(`${record.summary} ${record.body} ${record.type}`);
-        const score = terms.reduce(
-          (total, term) => total + (title.includes(term) ? 5 : 0) + (text.includes(term) ? 1 : 0),
-          0,
-        );
-        return { record, score };
+        const titleHits = terms.filter(term => title.includes(term)).length;
+        const bodyHits = terms.filter(term => text.includes(term)).length;
+        return { record, titleHits, bodyHits, exactTitle: title === terms.join(" ") };
       })
-      .filter((item) => item.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .filter((item) => item.titleHits > 0 || item.bodyHits > 0)
+      .sort((a, b) => Number(b.exactTitle) - Number(a.exactTitle) || b.titleHits - a.titleHits ||
+        Number(isArchived(a.record)) - Number(isArchived(b.record)) || b.bodyHits - a.bodyHits)
       .slice(0, 30)
       .map((item) => item.record);
   }, [query, records]);
@@ -59,8 +62,8 @@ export function SearchClient({ records }: { records: SearchRecord[] }) {
       <div className="search-results">
         {results.map((record, index) => (
           <Link href={record.href} key={`${record.type}-${record.href}-${index}`}>
-            <span>{record.type}</span>
-            <h2>{record.title}</h2>
+            <span>{isArchived(record) ? "Source archive" : record.type}</span>
+            <h2 lang={record.language}>{record.title}</h2>
             <p>{record.summary || record.body.slice(0, 180)}</p>
             <small>
               {record.date ?? "Undated"} · {record.language === "zh" ? "中文" : "English"}

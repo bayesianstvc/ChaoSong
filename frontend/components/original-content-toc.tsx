@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { decodeHtmlEntities } from "@/lib/html-entities";
+import { splitBilingualHeading } from "@/lib/public-article-presentation";
 
-type TocItem = { id: string; label: string; level: 2 | 3; page: number };
+type TocItem = { id: string; label: string; level: 2 | 3; page: number; language?: string };
 
 const PAGE_BREAK_PATTERN = /<div\b[^>]*(?:data-page-break=["']true["']|class=["'][^"']*article-page-break[^"']*["'])[^>]*>[\s\S]*?<\/div>/gi;
 
@@ -48,10 +49,16 @@ function decorateHeadings(html: string) {
     seen.set(base, count + 1);
     const id = count ? `${base}-${count + 1}` : base;
     const attributes = existingId ? rawAttributes.replace(/\sid=["'][^"']+["']/i, "") : rawAttributes;
-    items.push({ id, label: plainText(content), level, page });
+    const authoredLanguage = rawAttributes.match(/\slang=["']([^"']+)["']/i)?.[1];
+    items.push({ id, label: plainText(content), level, page, language: authoredLanguage });
     return `<${tag}${attributes} id="${id}">${content}</${tag}>`;
   }));
   return { html: pages.join(""), items, pages };
+}
+
+function fragmentId() {
+  try { return decodeURIComponent(window.location.hash.slice(1)); }
+  catch { return ""; }
 }
 
 export function OriginalContentToc({ html, language, railFooter }: { html: string; language?: "zh" | "en"; railFooter?: ReactNode }) {
@@ -60,6 +67,7 @@ export function OriginalContentToc({ html, language, railFooter }: { html: strin
   const [pageIndex, setPageIndex] = useState(0);
   const articleRef = useRef<HTMLDivElement>(null);
   const columnRef = useRef<HTMLDivElement>(null);
+  const previousFragment = useRef<string | null>(null);
   const hasExplicitPages = prepared.pages.length > 1;
   const safePageIndex = Math.min(pageIndex, Math.max(0, prepared.pages.length - 1));
   const isLongArticle = prepared.items.length >= 4 || plainText(prepared.html).length >= 5000;
@@ -70,20 +78,59 @@ export function OriginalContentToc({ html, language, railFooter }: { html: strin
     columnRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  const revealSection = useCallback((item: TocItem, behavior: ScrollBehavior = 'auto') => {
+    setPageIndex(item.page);
+    setActiveId(item.id);
+    // Later pages mount after the section is selected, so scroll after React commits.
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      articleRef.current?.querySelector<HTMLElement>(`#${CSS.escape(item.id)}`)?.scrollIntoView({ behavior, block: "start" });
+    }));
+  }, []);
+
+  useEffect(() => {
+    function followFragment() {
+      const id = fragmentId();
+      if (id === previousFragment.current) return;
+      const target = prepared.items.find(item => item.id === id);
+      if (target) {
+        previousFragment.current = id;
+        revealSection(target);
+      } else if (previousFragment.current !== null) {
+        previousFragment.current = null;
+        if (!id || id === 'main-content') {
+          setPageIndex(0);
+          setActiveId(prepared.items[0]?.id ?? "");
+        }
+      }
+    }
+    followFragment();
+    window.addEventListener("hashchange", followFragment);
+    return () => window.removeEventListener("hashchange", followFragment);
+  }, [prepared.items, revealSection]);
+
   function goToSection(index: number) {
     const item = prepared.items[index];
     if (!item) return;
-    setPageIndex(item.page);
-    setActiveId(item.id);
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      articleRef.current?.querySelector<HTMLElement>(`#${CSS.escape(item.id)}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }));
+    if (fragmentId() === item.id) revealSection(item);
+    else window.location.hash = encodeURIComponent(item.id);
   }
 
   function goToPage(nextPage: number) {
     const safePage = Math.max(0, Math.min(prepared.pages.length - 1, nextPage));
+    const first = prepared.items.find(item => item.page === safePage);
+    if (previousFragment.current) {
+      if (first) {
+        window.location.hash = encodeURIComponent(first.id);
+        return;
+      }
+      // A headingless page has no fragment to carry over from the previous page.
+      const url = new URL(window.location.href);
+      url.hash = '';
+      window.history.replaceState(window.history.state, "", url);
+      previousFragment.current = null;
+    }
     setPageIndex(safePage);
-    setActiveId(prepared.items.find((item) => item.page === safePage)?.id ?? "");
+    setActiveId(first?.id ?? "");
     window.requestAnimationFrame(scrollArticleStart);
   }
 
@@ -109,16 +156,20 @@ export function OriginalContentToc({ html, language, railFooter }: { html: strin
     <div className="original-reading-layout">
       <nav className="original-toc" aria-label={prepared.items.length ? "Table of contents" : "Reading tools"}>
         {prepared.items.length ? <p>On this page</p> : null}
-        {prepared.items.length ? prepared.items.map((item, index) => (
-          <a
+        {prepared.items.length ? prepared.items.map((item) => {
+          const bilingual = !item.language && language !== "zh" ? splitBilingualHeading(item.label) : null;
+          return <a
             className={`${item.level === 3 ? "is-subsection" : ""} ${activeId === item.id ? "active" : ""} ${hasExplicitPages && item.page !== safePageIndex ? "is-other-page" : ""}`}
-            href={`#${item.id}`}
+            href={`#${encodeURIComponent(item.id)}`}
             key={item.id}
-            onClick={(event) => { event.preventDefault(); goToSection(index); }}
+            lang={item.language ?? (language === "zh" ? language : undefined)}
+            onClick={(event) => {
+              if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && fragmentId() === item.id) revealSection(item);
+            }}
           >
-            {item.label}
-          </a>
-        )) : null}
+            {bilingual ? <><span lang={bilingual.beforeLang}>{bilingual.before}</span>{bilingual.divider}<span lang={bilingual.afterLang}>{bilingual.after}</span></> : item.label}
+          </a>;
+        }) : null}
         {hasExplicitPages ? <div className="long-article-pager" aria-label="Article page navigation">
           <span>Pages · {safePageIndex + 1}/{prepared.pages.length}</span>
           <div><button type="button" disabled={safePageIndex === 0} onClick={() => goToPage(safePageIndex - 1)}>Previous</button><button type="button" disabled={safePageIndex >= prepared.pages.length - 1} onClick={() => goToPage(safePageIndex + 1)}>Next</button></div>

@@ -11,7 +11,7 @@ export default async function ManagedPage({ params }: { params: Promise<{ slug: 
   if (!entry) notFound();
   return (
     <div className="inner-page">
-      <PageIntro index="Page" title={entry.title} lede={entry.summary} />
+      <PageIntro index="Page" title={entry.title} titleLanguage={entry.language} lede={entry.summary} />
       <ManagedContent entry={entry} />
     </div>
   );

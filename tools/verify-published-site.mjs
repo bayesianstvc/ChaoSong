@@ -1,10 +1,12 @@
 import { readFile, appendFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyCrawlArtifacts } from './verify-crawl-artifacts.mjs';
 
 export const RELEASE_URL = 'https://chaosong.blog/release.json';
 export const SOURCE_URL = 'https://chaosong.heoa-group.chatgpt.site/api/public-export?renderer=v34';
-const maxResponseBytes = 64 * 1024;
+export const MAX_RELEASE_BYTES = 64 * 1024;
+const maxResponseBytes = MAX_RELEASE_BYTES;
 
 function validateIdentity(release) {
   if (release?.formatVersion !== 1 ||
@@ -76,8 +78,13 @@ export async function verifyPublishedRelease(candidate, {
         const source = await readRelease(await fetchImpl(SOURCE_URL, {redirect:'error',credentials:'omit',cache:'no-store',headers:{accept:'application/json'},signal:AbortSignal.timeout(timeoutMs)}), true);
         if (source.generation !== candidate.generation) throw new Error('The current Sites v34 source no longer matches the publication');
       }
+      let crawlResult;
+      if (candidate.crawl) {
+        if (JSON.stringify(live.crawl) !== JSON.stringify(candidate.crawl)) throw new Error('Published crawl contract does not match the candidate');
+        crawlResult = await verifyCrawlArtifacts(candidate.crawl, { fetchImpl, timeoutMs, nonce: `${candidate.rendererRevision}-${attempt}` });
+      }
       log(`PUBLISHED_RELEASE_VERIFIED ${candidate.generation} ${candidate.rendererRevision}`);
-      return { generation: live.generation, rendererRevision: live.rendererRevision, attempts: attempt };
+      return { generation: live.generation, rendererRevision: live.rendererRevision, attempts: attempt, ...(crawlResult ? { crawl: crawlResult } : {}) };
     } catch (error) {
       lastFailure = error instanceof Error ? error.message : 'Release verification failed';
       log(`PUBLIC_RELEASE_CHECK ${attempt}/${attempts}: ${lastFailure}`);

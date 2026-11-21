@@ -2,7 +2,8 @@ import {readFile,writeFile,readdir,mkdir,cp,stat} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {validateStaticLinks} from './static-link-validation.mjs';
-import {applyStaticMetadata, appendVisitorCollector, visitorScript} from './v34-static-support.mjs';
+import {applyStaticMetadata, appendVisitorCollector, visitorScript, publicEntryPath} from './v34-static-support.mjs';
+import {generateCrawlArtifacts} from './generate-crawl-artifacts.mjs';
 const taskDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../.build');
 const info=JSON.parse(await readFile(path.join(taskDir,'latest-build.json'),'utf8'));
 const input=path.join(info.stage,'dist/client',info.basePath);
@@ -25,6 +26,8 @@ for(const f of files.filter(f=>selected.has(f.rel))){const rel=f.rel.split('/').
 const fallback=path.join(info.stage,'dist/client/404.html');try{await cp(fallback,path.join(output,'404.html'));manifest.push({path:'404.html',bytes:(await stat(fallback)).size});}catch(e){if(e.code!=='ENOENT')throw e;}
 await writeFile(path.join(output,'.nojekyll'),'','utf8');
 manifest.push({path:'.nojekyll',bytes:0});
+const crawl=await generateCrawlArtifacts({site:output,manifest,basePath:info.basePath,publishedRoutes:publicData.entries.map(publicEntryPath)});
+manifest.push(...crawl.artifacts.map(({path,bytes,sha256})=>({path,bytes,sha256})));
 const htmls=manifest.filter(x=>x.path.endsWith('.html'));
 const problems=[];
 const warnings=[];
@@ -35,7 +38,7 @@ for(const file of htmls){const html=await readFile(path.join(output,file.path),'
  if(/\b(?:src|poster)=["'][^"']*(?:chatgpt\.site|chaosong\.blog)/.test(html))problems.push({page:file.path,reason:'live source media dependency'});
  if(/(?:BACKUP_SITE_RESTORE|STUDIO_BACKUP_RESTORE_TOKEN|password_hash|"originalBody"|"bodyDocument"|\/api\/studio\/)/.test(html))problems.push({page:file.path,reason:'non-public marker'});
 }
-const report={createdAt:new Date().toISOString(),source:input,site:output,basePath:info.basePath,generation:info.generation,files:manifest.length,bytes:manifest.reduce((n,f)=>n+f.bytes,0),htmlPages:htmls.length,excludedUnreferencedFiles:files.length-selected.size,problems,warnings};
+const report={createdAt:new Date().toISOString(),source:input,site:output,basePath:info.basePath,generation:info.generation,files:manifest.length,bytes:manifest.reduce((n,f)=>n+f.bytes,0),htmlPages:htmls.length,excludedUnreferencedFiles:files.length-selected.size,crawl,problems,warnings};
 try{const catalog=JSON.parse(await readFile(path.join(info.stage,'media-catalog.json'),'utf8'));const chosen=new Map();for(const asset of catalog.assets)if(manifest.some(f=>f.path==='media/'+path.basename(asset.outputPath)))chosen.set(asset.sourceSha256,asset);const originals=[...chosen.values()].reduce((n,a)=>n+a.sourceBytes,0);const derivatives=[...chosen.values()].reduce((n,a)=>n+a.outputBytes,0);report.media={uniqueFiles:chosen.size,sourceBytes:originals,publishedBytes:derivatives,savedBytes:originals-derivatives,savedPercent:Number(((originals-derivatives)/originals*100).toFixed(2)),losslessOptimized:[...chosen.values()].filter(a=>a.mode!=='original-preserved').length,qualityPolicy:'Original dimensions, exact sRGB decoded pixels or original bytes; no lossy photo candidates published'};}catch(e){if(e.code!=='ENOENT')throw e;}
 await writeFile(path.join(info.stage,'static-verification.json'),JSON.stringify(report,null,2)+'\n','utf8');
 await writeFile(path.join(info.stage,'public-file-manifest.json'),JSON.stringify(manifest,null,2)+'\n','utf8');
